@@ -40,6 +40,7 @@ globalThis.fetch = async (url,options) => {
   if (url.endsWith('/quiz_start_room')) return Response.json({ok:true});
   if (url.endsWith('/quiz_set_ready')) return Response.json({ok:true});
   if (url.endsWith('/quiz_choose_topic')) return Response.json({ok:true});
+  if (url.endsWith('/quiz_rematch')) return Response.json({ok:true});
   if (url.endsWith('/quiz_submit_answer')) return Response.json({accepted:true});
   throw new Error('Unexpected URL '+url);
 };
@@ -67,6 +68,12 @@ assert.equal((await post('topic',{...creds,topic:'Historia'})).data.ok,true);
 assert.ok(sent.at(-1).url.endsWith('/quiz_choose_topic'));
 assert.equal(sent.at(-1).body.p_topic,'Historia');
 assert.equal((await post('topic',{...creds,topic:null})).status,400);
+for (const accept of [true,false]) {
+  assert.equal((await post('rematch',{...creds,accept})).data.ok,true);
+  assert.ok(sent.at(-1).url.endsWith('/quiz_rematch'));
+  assert.equal(sent.at(-1).body.p_accept,accept);
+}
+assert.equal((await post('rematch',{...creds,accept:'true'})).status,400);
 assert.equal((await post('state',creds)).data.status,'lobby');
 assert.equal((await post('start',creds)).data.ok,true);
 for (const ready of [true, false]) {

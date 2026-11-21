@@ -11,6 +11,7 @@ Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla
 - **Kaikki aihealueet** kokoaa kysymykset koko pankista. **Pelaajien valitsemat** käyttää odotushuoneessa varattuja aiheita. Jokainen voi varata yhden vapaan aiheen. Kysymyksen oma aihealue näkyy pelissä.
 - Oikeasta lopullisesta valinnasta saa 600–1000 pistettä sen lähetysajan mukaan.
 - Välitulokset, oikean vastauksen paljastus ja lopulliset sijoitukset.
+- Tulosruudun **Pelaa uudestaan** lähettää muille pelaajille 30 sekunnin uusintakutsun. Hyväksyneet siirtyvät uuteen odotushuoneeseen samalla aihevalintatavalla.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
 - API-asiakkaat voivat edelleen pyytää Geminiä luomaan valitsemansa vapaan aiheen kysymykset huoneen luonnin yhteydessä.
 - Ilman Gemini-avainta käytettävissä ovat kysymyspankki ja **120 valmista yleistietokysymystä**. Demotilassa valittu aihealue ja vaikeustaso eivät muuta kysymyksiä.
@@ -66,7 +67,7 @@ Pelkkä HTML:n pudottaminen Netlify Dropiin **ei riitä**, sillä peli vaatii pa
 
 ## Pelin toiminta ja rajoitukset
 
-**Palvelintekniikka:** Netlify Function käsittelee pyynnöt `/api/create`, `/api/join`, `/api/topic`, `/api/ready`, `/api/answer` ja `/api/state`. Funktio käyttää Supabasen Data REST API:a ja tietokantafunktioita (RPC). Pelilogiikka, vastausten oikeellisuus ja pisteytys pysyvät palvelinpuolella. Selain ei saa oikeaa vastausta ennen kierroksen paljastusvaihetta. Selain pollaa tilaa 1,25 sekunnin välein; erillistä Supabase Realtime -yhteyttä ei tarvita.
+**Palvelintekniikka:** Netlify Function käsittelee pyynnöt `/api/create`, `/api/join`, `/api/topic`, `/api/ready`, `/api/answer`, `/api/rematch` ja `/api/state`. Funktio käyttää Supabasen Data REST API:a ja tietokantafunktioita (RPC). Pelilogiikka, vastausten oikeellisuus ja pisteytys pysyvät palvelinpuolella. Selain ei saa oikeaa vastausta ennen kierroksen paljastusvaihetta. Selain pollaa tilaa 1,25 sekunnin välein; erillistä Supabase Realtime -yhteyttä ei tarvita.
 
 **Istunnon palautus:** Pelaajatunniste tallennetaan kyseisen selaimen paikalliseen tallennustilaan, ja huoneen voi avata uudelleen samalla laitteella ja URL-osoitteella. Pelaajaa ei kuitenkaan voi tällä versiolla poistaa huoneesta; 10 paikan katto koskee myös yhteyden katkaisseita pelaajia.
 

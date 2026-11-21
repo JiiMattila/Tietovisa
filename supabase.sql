@@ -34,6 +34,11 @@ alter table public.quiz_players add column if not exists ready boolean not null 
 alter table public.quiz_rooms add column if not exists topic_mode text not null default 'all'
   check (topic_mode in ('all','players'));
 alter table public.quiz_players add column if not exists chosen_topic text;
+alter table public.quiz_rooms
+  add column if not exists rematch_deadline timestamptz,
+  add column if not exists rematch_host_id uuid,
+  add column if not exists rematch_room_id uuid;
+alter table public.quiz_players add column if not exists rematch_response boolean;
 
 create table if not exists public.quiz_answers (
   room_id uuid not null references public.quiz_rooms(id) on delete cascade,
@@ -48,6 +53,8 @@ create table if not exists public.quiz_answers (
 create index if not exists quiz_players_room_idx on public.quiz_players(room_id);
 create unique index if not exists quiz_players_chosen_topic_idx
   on public.quiz_players(room_id,chosen_topic) where chosen_topic is not null;
+create unique index if not exists quiz_rooms_rematch_room_idx
+  on public.quiz_rooms(rematch_room_id) where rematch_room_id is not null;
 create index if not exists quiz_answers_round_idx on public.quiz_answers(room_id,round_index);
 
 alter table public.quiz_rooms enable row level security;
@@ -181,7 +188,7 @@ $$;
 create or replace function public.quiz_set_ready(
   p_code text, p_player_id uuid, p_secret_hash text, p_ready boolean
 ) returns jsonb language plpgsql security invoker set search_path = '' as $$
-declare r public.quiz_rooms%rowtype; v_questions jsonb;
+declare r public.quiz_rooms%rowtype; v_questions jsonb; v_source text;
 begin
   select * into r from public.quiz_rooms where code=upper(trim(p_code)) for update;
   if not found or not exists
@@ -196,14 +203,26 @@ begin
   update public.quiz_players set ready=p_ready where room_id=r.id and id=p_player_id;
   if not exists (select 1 from public.quiz_players where room_id=r.id and not ready) then
     v_questions := r.questions;
-    if r.topic_mode='players' then
-      v_questions := public.quiz_pick_player_topics(r.id,r.difficulty,r.question_total);
-      if jsonb_array_length(v_questions) <> r.question_total then
-        raise exception 'Valituista aihealueista ei löytynyt tarpeeksi kysymyksiä. Vaihtakaa aihetta tai kokeilkaa uudelleen.';
-      end if;
+    v_source := r.question_source;
+    if jsonb_array_length(v_questions)=0 then
+      begin
+        v_questions := public.quiz_pick_player_topics(r.id,r.difficulty,r.question_total);
+        if jsonb_array_length(v_questions) <> r.question_total then
+          raise sqlstate 'QZ001';
+        end if;
+      exception when sqlstate 'QZ001' then
+        -- Kaikkien aiheiden pelin voi uusia myös tyhjällä kysymyspankilla.
+        if r.topic_mode='all' then
+          select questions,question_source into v_questions,v_source
+            from public.quiz_rooms where rematch_room_id=r.id;
+        end if;
+        if v_questions is null or jsonb_array_length(v_questions) <> r.question_total then
+          raise exception 'Valituista aihealueista ei löytynyt tarpeeksi kysymyksiä. Vaihtakaa aihetta tai kokeilkaa uudelleen.';
+        end if;
+      end;
     end if;
     update public.quiz_rooms set status='question',round_index=0,
-      question_started_at=clock_timestamp(),questions=v_questions where id=r.id;
+      question_started_at=clock_timestamp(),questions=v_questions,question_source=v_source where id=r.id;
   end if;
   return jsonb_build_object('ok',true);
 end;
@@ -252,11 +271,71 @@ create or replace function public.quiz_submit_answer(
   select public.quiz_submit_answer(p_code,p_player_id,p_secret_hash,p_choice,null::integer);
 $$;
 
+-- Sama huonelukko serialisoi vastaukset ja varmistaa yhden uusintahuoneen.
+create or replace function public.quiz_finish_rematch(p_room_id uuid)
+returns void language plpgsql security invoker set search_path = '' as $$
+declare r public.quiz_rooms%rowtype; v_new_room uuid; v_code text; v_host_name text;
+begin
+  select * into r from public.quiz_rooms where id=p_room_id for update;
+  if not found or r.status<>'finished' or r.rematch_deadline is null or r.rematch_room_id is not null then return; end if;
+  if clock_timestamp()<r.rematch_deadline and exists (
+    select 1 from public.quiz_players where room_id=r.id and rematch_response is null
+  ) then return; end if;
+
+  for attempt in 1..5 loop
+    v_code := translate(upper(left(gen_random_uuid()::text,6)),'01','GH');
+    insert into public.quiz_rooms(code,question_total,timer_seconds,topic,topic_mode,difficulty,question_source,questions)
+      values(v_code,r.question_total,r.timer_seconds,
+        case when r.topic_mode='players' then 'Pelaajien valitsemat' else 'Vapaa' end,
+        r.topic_mode,r.difficulty,'bank','[]'::jsonb)
+      on conflict (code) do nothing returning id into v_new_room;
+    exit when v_new_room is not null;
+  end loop;
+  if v_new_room is null then raise exception 'Uuden pelin luonti epäonnistui. Kokeile uudelleen.'; end if;
+
+  select name into v_host_name from public.quiz_players where id=r.rematch_host_id and room_id=r.id;
+  insert into public.quiz_players(room_id,name,secret_hash)
+    select v_new_room,name,secret_hash from public.quiz_players where room_id=r.id and rematch_response=true;
+  update public.quiz_rooms set host_id=(
+    select id from public.quiz_players where room_id=v_new_room and name=v_host_name
+  ) where id=v_new_room;
+  update public.quiz_rooms set rematch_room_id=v_new_room where id=r.id;
+end;
+$$;
+
+create or replace function public.quiz_rematch(
+  p_code text, p_player_id uuid, p_secret_hash text, p_accept boolean
+) returns jsonb language plpgsql security invoker set search_path = '' as $$
+declare r public.quiz_rooms%rowtype; v_response boolean;
+begin
+  select * into r from public.quiz_rooms where code=upper(trim(p_code)) for update;
+  select rematch_response into v_response from public.quiz_players
+    where room_id=r.id and id=p_player_id and secret_hash=p_secret_hash;
+  if not found then raise exception 'Pelaajaa ei löytynyt'; end if;
+  if r.status<>'finished' then raise exception 'Peli on vielä kesken'; end if;
+  if p_accept is null then raise exception 'Virheellinen vastaus uusintakutsuun'; end if;
+  if v_response is not null then
+    if v_response<>p_accept then raise exception 'Olet jo vastannut uusintakutsuun'; end if;
+    return jsonb_build_object('ok',true);
+  end if;
+  if r.rematch_deadline is null then
+    if not p_accept then raise exception 'Uusintakutsua ei ole vielä lähetetty'; end if;
+    update public.quiz_rooms set rematch_deadline=clock_timestamp()+interval '30 seconds',
+      rematch_host_id=p_player_id where id=r.id;
+  elsif r.rematch_room_id is not null or clock_timestamp()>=r.rematch_deadline then
+    raise exception 'Uusintakutsun vastausaika päättyi';
+  end if;
+  update public.quiz_players set rematch_response=p_accept where room_id=r.id and id=p_player_id;
+  perform public.quiz_finish_rematch(r.id);
+  return jsonb_build_object('ok',true);
+end;
+$$;
+
 -- Oikea vastaus ja pelaajien valinnat jaetaan vasta paljastusvaiheessa.
 create or replace function public.quiz_get_state(
   p_code text, p_player_id uuid, p_secret_hash text
 ) returns jsonb language plpgsql security definer set search_path = '' as $$
-declare r public.quiz_rooms%rowtype; v_q jsonb; v_public_q jsonb := null;
+declare r public.quiz_rooms%rowtype; v_q jsonb; v_public_q jsonb := null; v_rematch jsonb;
 begin
   select * into r from public.quiz_rooms where code=upper(trim(p_code));
   if not found or not exists
@@ -264,6 +343,20 @@ begin
     then raise exception 'Pelaajaa ei löytynyt tai tunniste ei kelpaa'; end if;
   perform public.quiz_advance_room(r.id);
   select * into r from public.quiz_rooms where id=r.id;
+  if r.status='finished' and r.rematch_deadline is not null then
+    if r.rematch_room_id is null then
+      perform public.quiz_finish_rematch(r.id);
+      select * into r from public.quiz_rooms where id=r.id;
+    end if;
+    select jsonb_build_object(
+      'deadline',r.rematch_deadline, 'response',p.rematch_response,'closed',r.rematch_room_id is not null,
+      'nextRoom',case when p.rematch_response then (
+        select jsonb_build_object('code',n.code,'playerId',np.id)
+        from public.quiz_rooms n join public.quiz_players np on np.room_id=n.id
+        where n.id=r.rematch_room_id and np.name=p.name and np.secret_hash=p_secret_hash
+      ) end
+    ) into v_rematch from public.quiz_players p where p.id=p_player_id and p.room_id=r.id;
+  end if;
   if r.status in ('question','reveal') then
     v_q := r.questions -> r.round_index;
     v_public_q := jsonb_build_object('text',v_q->>'text','options',v_q->'options','category',v_q->>'category');
@@ -280,6 +373,7 @@ begin
     'topics',case when r.topic_mode='players' and r.status='lobby' then public.quiz_topic_names() end,
     'startedAt',r.question_started_at, 'revealAt',r.reveal_started_at,
     'serverNow',clock_timestamp(), 'question',v_public_q,
+    'rematch',v_rematch,
     'myAnswer',(select a.choice from public.quiz_answers a where a.room_id=r.id
                  and a.round_index=r.round_index and a.player_id=p_player_id),
     'players',(select coalesce(jsonb_agg(jsonb_build_object(
@@ -311,6 +405,8 @@ revoke all on function public.quiz_start_room(text,uuid,text) from public, anon,
 revoke all on function public.quiz_submit_answer(text,uuid,text,integer) from public, anon, authenticated;
 revoke all on function public.quiz_submit_answer(text,uuid,text,integer,integer) from public, anon, authenticated;
 revoke all on function public.quiz_get_state(text,uuid,text) from public, anon, authenticated;
+revoke all on function public.quiz_rematch(text,uuid,text,boolean) from public, anon, authenticated;
+revoke all on function public.quiz_finish_rematch(uuid) from public, anon, authenticated;
 revoke all on function public.quiz_advance_room(uuid) from public, anon, authenticated;
 grant execute on function public.quiz_topic_names() to service_role;
 grant execute on function public.quiz_create_room(text,text,text,integer,integer,text,text,text,jsonb) to service_role;
@@ -322,6 +418,8 @@ grant execute on function public.quiz_start_room(text,uuid,text) to service_role
 grant execute on function public.quiz_submit_answer(text,uuid,text,integer) to service_role;
 grant execute on function public.quiz_submit_answer(text,uuid,text,integer,integer) to service_role;
 grant execute on function public.quiz_get_state(text,uuid,text) to service_role;
+grant execute on function public.quiz_rematch(text,uuid,text,boolean) to service_role;
+grant execute on function public.quiz_finish_rematch(uuid) to service_role;
 grant execute on function public.quiz_advance_room(uuid) to service_role;
 
 -- Tietokantafunktioiden API-skeeman päivitys PostgRESTille.
@@ -466,9 +564,10 @@ declare
   v_difficulty text;
   v_questions jsonb := '[]'::jsonb;
 begin
-  select array_agg(lower(chosen_topic)) into v_topics
-    from public.quiz_players where room_id=p_room_id and chosen_topic is not null;
-  if v_topics is null then return v_questions; end if;
+  select case when topic_mode='all' then array(select lower(name) from unnest(public.quiz_topic_names()) names(name))
+    else array(select lower(chosen_topic) from public.quiz_players where room_id=p_room_id and chosen_topic is not null)
+    end into v_topics from public.quiz_rooms where id=p_room_id;
+  if coalesce(cardinality(v_topics),0)=0 then return v_questions; end if;
 
   select coalesce(array_agg(fingerprint order by last_seen),'{}'::text[]) into v_recent
   from (

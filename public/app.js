@@ -167,6 +167,23 @@ function renderQuestion() {
     </div>${renderPlayers('question')}</section>`;
   updateClock();
 }
+function renderRematch(invitation) {
+  if (!invitation) return `<button class="btn btn-primary btn-full" data-action="rematch" data-accept="true" ${busy?'disabled':''}>Pelaa uudestaan →</button>`;
+  if (invitation.response === false) return '<p class="muted rematch-status">Jäät pois uudesta pelistä.</p>';
+  if (invitation.closed) return '<p class="muted rematch-status">Uusintakutsu on päättynyt.</p>';
+  const countdown = '<span id="rematch-countdown" class="timer-value"></span>';
+  if (invitation.response === true) {
+    return `<p class="muted rematch-status">Odotetaan muiden vastauksia. Aikaa jäljellä ${countdown}.</p>`;
+  }
+  return `<dialog class="panel rematch-dialog" id="rematch-dialog" aria-labelledby="rematch-title" aria-describedby="rematch-description">
+    <h2 id="rematch-title">Uusi peli?</h2>
+    <p id="rematch-description" class="muted">Hyväksy kutsu, niin pääset mukaan uuteen peliin. Aikaa jäljellä ${countdown}.</p>
+    <div class="button-row">
+      <button class="btn btn-primary" data-action="rematch" data-accept="true" ${busy?'disabled':''}>Mukaan</button>
+      <button class="btn btn-secondary" data-action="rematch" data-accept="false" ${busy?'disabled':''}>Ei kiitos</button>
+    </div>
+  </dialog>`;
+}
 function renderFinished() {
   const sorted = [...state.players].sort((a,b) => b.score-a.score);
   const winner = sorted[0];
@@ -176,14 +193,32 @@ function renderFinished() {
     <h1 class="winner-name">${escapeHtml(topNames.join(' & '))}</h1><p>${topNames.length===1?'Onnittelut voittajalle!':'Tasapeli kärjessä!'} Paras pistemäärä: <strong class="highlight">${winner.score.toLocaleString('fi-FI')} p</strong></p></section>
     <section class="finish-board"><div class="panel"><div class="player-header"><h2>Lopputulokset</h2><span class="count-pill">${sorted.length} pelaajaa</span></div><div class="player-list">
     ${sorted.map((p,i)=>`<div class="player"><span class="rank-num">${i+1}.</span><span class="avatar ${i%2?'alt':''}">${escapeHtml(p.name.charAt(0).toUpperCase())}</span><div class="player-grow"><span class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</span></div><span class="score">${p.score.toLocaleString('fi-FI')} p</span></div>`).join('')}</div>
-    <div class="divider"></div><button class="btn btn-primary btn-full" data-action="leave">Pelaa uusi peli →</button></div></section>`;
+    <div class="divider"></div>${renderRematch(state.rematch)}
+    <button class="btn btn-secondary btn-full rematch-leave" data-action="leave">Takaisin etusivulle</button></div></section>`;
+  const dialog = document.querySelector('#rematch-dialog');
+  if (dialog) {
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    dialog.showModal();
+  }
+  updateClock();
 }
 function updateClock() {
-  if (!state || !['question','reveal'].includes(state.status)) return;
+  if (!state) return;
+  const now = Date.now() + clockOffset;
+  if (state.status==='finished') {
+    const counter = document.querySelector('#rematch-countdown');
+    if (!counter) return;
+    const left = Math.max(0,Date.parse(state.rematch.deadline)-now);
+    counter.textContent = Math.ceil(left/1000) + ' s';
+    if (left===0) {
+      document.querySelectorAll('#rematch-dialog button:not(:disabled)').forEach(button => button.disabled=true);
+    }
+    return;
+  }
+  if (!['question','reveal'].includes(state.status)) return;
   const bar = document.querySelector('#timer-bar');
   const number = document.querySelector('#timer-value');
   if (!bar || !number) return;
-  const now = Date.now() + clockOffset;
   const duration = state.status==='question' ? state.timer * 1000 : 6000;
   const started = Date.parse(state.status==='question' ? state.startedAt : state.revealAt);
   const left = Math.max(0,duration-(now-started));
@@ -213,12 +248,23 @@ async function refreshState(player) {
   try {
     const next = await api('state',credentials());
     if (identity!==player) return;
+    if (next.rematch?.nextRoom) {
+      saveIdentity({...next.rematch.nextRoom,secret:player.secret});
+      state = null;
+      lastRoundKey = '';
+      render();
+      setTimeout(poll,0);
+      return;
+    }
     clockOffset = Date.parse(next.serverNow)-Date.now();
     const key = `${next.status}/${next.roundIndex}`;
     const wasDifferent = key !== lastRoundKey;
+    // Pidä sama dialogi auki tilapyyntöjen välillä, jotta fokus ei vaihdu.
+    const sameResults = next.status==='finished' && !wasDifferent &&
+      JSON.stringify(state?.rematch)===JSON.stringify(next.rematch);
     state = next;
     lastRoundKey = key;
-    render();
+    if (!sameResults) render();
     if (wasDifferent && next.status==='finished') toast('Kilpailu päättyi!');
   } catch (err) {
     if (identity!==player) return;
@@ -270,7 +316,12 @@ app.addEventListener('click', async event => {
     catch {prompt('Kopioi tästä:',value);}
     return;
   }
-  if (busy || button.disabled || (action!=='ready' && action!=='answer')) return;
+  if (busy || button.disabled) return;
+  if (action==='rematch') {
+    await changeRoom('rematch',{accept:button.dataset.accept==='true'});
+    return;
+  }
+  if (action!=='ready' && action!=='answer') return;
   const payload = action==='ready'
     ? {ready:button.dataset.ready==='true'}
     : {choice:Number(button.dataset.choice), roundIndex:state.roundIndex};
