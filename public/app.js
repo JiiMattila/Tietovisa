@@ -8,9 +8,12 @@ let identity = null;
 let state = null;
 let loading = false;
 let busy = false;
+let pendingAnswer = null;
 let polling = null;
 let clockOffset = 0;
 let lastRoundKey = '';
+let renderedView = '';
+let renderedScoreboard = '';
 let toastTimer;
 
 function toast(message) {
@@ -51,6 +54,7 @@ function formField(label, name, placeholder, value='', extra='') {
   return `<div class="field"><label for="${name}">${label}</label><input id="${name}" name="${name}" placeholder="${placeholder}" maxlength="80" value="${escapeHtml(value)}" ${extra} required></div>`;
 }
 function renderHome() {
+  renderedView = '';
   const prefill = new URLSearchParams(location.search).get('room') || '';
   document.title = 'Nörttien Arvauskeskus — Moninpeli';
   app.innerHTML = `
@@ -112,26 +116,55 @@ function renderPlayers(kind='lobby') {
     ${kind==='lobby'&&players.length===1?'<p class="subnote">Odotat muita pelaajia. Voit myös kokeilla peliä yksin.</p>':''}
   </div>`;
 }
-function renderTopicPicker(chosenTopic) {
-  const reserved = new Set(state.players.filter(p => p.id!==state.meId).map(p => p.chosenTopic));
-  const options = (state.topics || []).map(topic => {
-    const taken = reserved.has(topic);
-    return `<option value="${escapeHtml(topic)}" ${taken?'disabled':''} ${topic===chosenTopic?'selected':''}>${escapeHtml(topic)}${taken?' (varattu)':''}</option>`;
-  }).join('');
-  const hint = state.players.length>state.total
-    ? '<small>Kysymyksiä on vähemmän kuin pelaajia, joten peli arpoo mukaan mahtuvat aiheet.</small>'
-    : '';
+function updateScoreboard(kind) {
+  const markup = renderPlayers(kind);
+  if (markup === renderedScoreboard) return;
+  app.querySelector('.scoreboard').outerHTML = markup;
+  renderedScoreboard = markup;
+}
+function renderTopicPicker() {
+  const options = (state.topics || []).map(topic => `<option value="${escapeHtml(topic)}">${escapeHtml(topic)}</option>`).join('');
   return `<div class="field"><label for="player-topic">Oma aihealue</label>
-    <select id="player-topic" ${busy?'disabled':''}><option value="">${chosenTopic?'Vapauta valinta':'Valitse aihealue'}</option>${options}</select>
-    <small>Valitse aihealue ennen kuin merkitset itsesi valmiiksi. Aiheen vaihtaminen peruu valmiuden.</small>${hint}
+    <select id="player-topic"><option value="">Valitse aihealue</option>${options}</select>
+    <small>Valitse aihealue ennen kuin merkitset itsesi valmiiksi. Aiheen vaihtaminen peruu valmiuden.</small>
+    <small id="topic-limit-hint" hidden>Kysymyksiä on vähemmän kuin pelaajia, joten peli arpoo mukaan mahtuvat aiheet.</small>
     </div>`;
+}
+function updateLobby(syncTopic = false) {
+  const me = state.players.find(p => p.id===state.meId);
+  const ready = me?.ready === true;
+  const readyButton = app.querySelector('[data-action="ready"]');
+  readyButton.dataset.ready = String(!ready);
+  readyButton.classList.toggle('btn-secondary', ready);
+  readyButton.classList.toggle('btn-primary', !ready);
+  readyButton.disabled = busy || (state.topicMode==='players' && !me?.chosenTopic);
+  const label = busy ? 'Odota hetki…' : ready ? 'Peru valmius' : 'Valmiina';
+  if (readyButton.textContent !== label) readyButton.textContent = label;
+
+  const picker = app.querySelector('#player-topic');
+  if (picker) {
+    picker.disabled = busy;
+    app.querySelector('#topic-limit-hint').hidden = state.players.length <= state.total;
+    // Anna iPhonen avoimen valitsimen säilyttää vaihtoehtonsa valinnan ajan.
+    if (!busy && (syncTopic || document.activeElement !== picker)) {
+      const reserved = new Set(state.players.filter(p => p.id!==state.meId).map(p => p.chosenTopic));
+      for (const option of picker.options) {
+        const taken = reserved.has(option.value);
+        const text = option.value ? `${option.value}${taken?' (varattu)':''}` : me?.chosenTopic ? 'Vapauta valinta' : 'Valitse aihealue';
+        option.disabled = taken;
+        if (option.textContent !== text) option.textContent = text;
+      }
+      const chosen = me?.chosenTopic || '';
+      if (picker.value !== chosen) picker.value = chosen;
+    }
+  }
+  updateScoreboard('lobby');
 }
 function renderLobby() {
   document.title = `Odota pelaajia • ${state.code} — Nörttien Arvauskeskus`;
-  const me = state.players.find(p => p.id===state.meId);
-  const ready = me?.ready === true;
   const chooseTopics = state.topicMode==='players';
   const topic = state.topic==='Vapaa' ? 'Kaikki aihealueet' : state.topic;
+  renderedScoreboard = renderPlayers('lobby');
   app.innerHTML = `${roomTitle('Odotushuone','Jaa koodi kavereille. Peli alkaa, kun kaikki huoneessa ovat valmiina.','● HUONE AUKI')}
     <section class="layout"><div class="panel">
       <div class="room-label">LIITTYMISKOODI</div>
@@ -139,10 +172,32 @@ function renderLobby() {
       <div class="button-row"><button class="btn btn-secondary btn-small" data-action="copy-code">⧉ Kopioi koodi</button><button class="btn btn-secondary btn-small" data-action="copy-link">↗ Kopioi kutsulinkki</button></div>
       <div class="room-instructions"><strong>${state.total} kysymystä</strong> · ${state.timer} s / kysymys · ${escapeHtml(state.difficulty)}<br>Aihe: <strong>${escapeHtml(topic)}</strong><br><br>Kaikki vastaavat samaan kysymykseen omilta laitteiltaan. Nopeus vaikuttaa pisteisiin.</div>
       ${state.source==='demo'?'<div class="demo-alert">⚠ Demotila: käytössä ovat valmiit yleistietokysymykset. Oman aihealueen AI-kysymykset aktivoituvat, kun Gemini API -avain lisätään Netlifyyn.</div>':''}
-      ${chooseTopics?renderTopicPicker(me?.chosenTopic):''}
-      <button class="btn ${ready?'btn-secondary':'btn-primary'} btn-full" data-action="ready" data-ready="${!ready}" ${busy||(chooseTopics&&!me?.chosenTopic)?'disabled':''}>${ready?'Peru valmius':busy?'Odota hetki…':'Valmiina'}</button>
+      ${chooseTopics?renderTopicPicker():''}
+      <button class="btn btn-full" data-action="ready">Valmiina</button>
       <button class="btn btn-secondary btn-full" style="margin-top:10px" data-action="leave">Takaisin etusivulle</button>
-    </div>${renderPlayers('lobby')}</section>`;
+    </div>${renderedScoreboard}</section>`;
+  updateLobby();
+}
+function updateQuestion() {
+  const reveal = state.status==='reveal';
+  const sending = !reveal && pendingAnswer?.player === identity && pendingAnswer.roundIndex === state.roundIndex;
+  const selected = sending ? pendingAnswer.choice : state.myAnswer;
+  const correct = reveal ? state.question.answerIndex : null;
+  for (const button of app.querySelectorAll('[data-action="answer"]')) {
+    const choice = Number(button.dataset.choice);
+    const isSelected = selected === choice;
+    const isCorrect = correct === choice;
+    button.classList.toggle('correct', isCorrect);
+    button.classList.toggle('wrong', reveal && isSelected && !isCorrect);
+    button.classList.toggle('selected', !reveal && isSelected);
+    button.setAttribute('aria-pressed', String(isSelected));
+    button.disabled = reveal || busy;
+    const icon = isCorrect ? '✓' : !isSelected ? '' : reveal ? '×' : sending ? '…' : '✓';
+    const iconElement = button.querySelector('.answer-icon');
+    if (iconElement.textContent !== icon) iconElement.textContent = icon;
+  }
+  updateScoreboard('question');
+  updateClock();
 }
 function renderQuestion() {
   const q = state.question;
@@ -151,23 +206,17 @@ function renderQuestion() {
   const selected = state.myAnswer;
   const answered = selected !== null && selected !== undefined;
   const reveal = state.status==='reveal';
+  renderedScoreboard = renderPlayers('question');
   document.title = `Kysymys ${index+1}/${state.total} — Nörttien Arvauskeskus`;
   app.innerHTML = `<div class="game-top"><span class="progress-label">KYSYMYS ${index+1} / ${state.total}</span><span class="chip ${reveal?'':'chip-green'}">${reveal?'✓ Oikea vastaus':'● KYSYMYS KÄYNNISSÄ'}</span></div>
     <div class="progress-strip"><div class="progress-fill" style="width:${((index+1)/state.total)*100}%"></div></div>
     <section class="layout"><div>
       <div class="question-area"><div class="question-category"><span>${escapeHtml(q.category || state.topic)}</span><span>${escapeHtml(state.difficulty)}</span></div><h1 class="question-text">${escapeHtml(q.text)}</h1></div>
       <div class="timer-row"><span class="muted" style="font-size:.83rem">${reveal?'Seuraava kysymys':'Aikaa jäljellä'}</span><div class="timer-track"><div id="timer-bar" class="timer-bar"></div></div><span id="timer-value" class="timer-value">--</span></div>
-      <div class="answer-grid">${q.options.map((option,i) => {
-        const classes = ['answer'];
-        if (reveal && q.answerIndex===i) classes.push('correct');
-        else if (reveal && answered && selected===i) classes.push('wrong');
-        else if (answered && selected===i) classes.push('selected');
-        const icon = reveal && q.answerIndex===i ? '✓' : reveal && answered && selected===i ? '×' : answered && selected===i ? '✓' : '';
-        return `<button data-action="answer" data-choice="${i}" class="${classes.join(' ')}" aria-pressed="${selected===i}" ${reveal||busy?'disabled':''}><span class="answer-letter">${letters[i]}</span><span class="answer-text">${escapeHtml(option)}</span><span class="answer-icon">${icon}</span></button>`;
-      }).join('')}</div>
+      <div class="answer-grid">${q.options.map((option,i) => `<button data-action="answer" data-choice="${i}" class="answer"><span class="answer-letter">${letters[i]}</span><span class="answer-text">${escapeHtml(option)}</span><span class="answer-icon"></span></button>`).join('')}</div>
       ${reveal?`<div class="reveal-explanation"><strong>${answered&&selected===q.answerIndex?'Oikein vastattu!':'Oikea vastaus: '+letters[q.answerIndex]+' — '+escapeHtml(q.options[q.answerIndex])}</strong>${escapeHtml(q.explanation || '')}</div>`:'<p class="game-hint">Voit vaihtaa vastaustasi, kunnes kaikki ovat vastanneet tai aika loppuu.</p>'}
-    </div>${renderPlayers('question')}</section>`;
-  updateClock();
+    </div>${renderedScoreboard}</section>`;
+  updateQuestion();
 }
 function renderRematch(invitation) {
   if (!invitation) return `<button class="btn btn-primary btn-full" data-action="rematch" data-accept="true" ${busy?'disabled':''}>Pelaa uudestaan →</button>`;
@@ -233,14 +282,19 @@ function updateClock() {
     document.querySelectorAll('[data-action="answer"]:not(:disabled)').forEach(button => button.disabled=true);
   }
 }
-function render() {
+function render(syncTopic = false) {
   if (!identity) return renderHome();
-  if (!state) {app.innerHTML='<div class="loading"><span class="spinner"></span> Yhdistetään pelihuoneeseen...</div>';return;}
-  if (state.status==='lobby') {
-    // Tilan päivitys ei saa sulkea pelaajan avointa alasvetovalikkoa.
-    if (busy || document.activeElement?.id!=='player-topic') renderLobby();
+  if (!state) {
+    renderedView = '';
+    app.innerHTML='<div class="loading"><span class="spinner"></span> Yhdistetään pelihuoneeseen...</div>';
+    return;
   }
-  else if (state.status==='question'||state.status==='reveal') renderQuestion();
+  const view = `${state.code}/${state.status}/${state.roundIndex}`;
+  const sameView = renderedView === view;
+  renderedView = view;
+  // Säilytä painikkeet, jotta taustapäivitys ei katkaise kesken olevaa painallusta.
+  if (state.status==='lobby') sameView ? updateLobby(syncTopic) : renderLobby();
+  else if (state.status==='question'||state.status==='reveal') sameView ? updateQuestion() : renderQuestion();
   else if (state.status==='finished') renderFinished();
 }
 function poll() {
@@ -348,6 +402,7 @@ async function changeRoom(action,payload) {
   if (busy || !identity) return;
   const player = identity;
   busy=true;
+  if (action==='answer') pendingAnswer = { player, ...payload };
   render();
   try {
     await api(action, {...credentials(),...payload});
@@ -358,8 +413,9 @@ async function changeRoom(action,payload) {
     // Mutation jälkeen tarvitaan uusi tilahaku, vaikka edellinen olisi vielä kesken.
     await polling;
     if (identity===player) await poll();
+    pendingAnswer=null;
     busy=false;
-    render();
+    render(action==='topic');
   }
 }
 function init() {
