@@ -140,7 +140,7 @@ function renderLobby() {
       <div class="room-instructions"><strong>${state.total} kysymystä</strong> · ${state.timer} s / kysymys · ${escapeHtml(state.difficulty)}<br>Aihe: <strong>${escapeHtml(topic)}</strong><br><br>Kaikki vastaavat samaan kysymykseen omilta laitteiltaan. Nopeus vaikuttaa pisteisiin.</div>
       ${state.source==='demo'?'<div class="demo-alert">⚠ Demotila: käytössä ovat valmiit yleistietokysymykset. Oman aihealueen AI-kysymykset aktivoituvat, kun Gemini API -avain lisätään Netlifyyn.</div>':''}
       ${chooseTopics?renderTopicPicker(me?.chosenTopic):''}
-      <button class="btn ${ready?'btn-secondary':'btn-primary'} btn-full" data-action="ready" data-ready="${!ready}" ${busy||(chooseTopics&&!me?.chosenTopic)?'disabled':''}>${ready?'Peru valmius':'Valmiina'}</button>
+      <button class="btn ${ready?'btn-secondary':'btn-primary'} btn-full" data-action="ready" data-ready="${!ready}" ${busy||(chooseTopics&&!me?.chosenTopic)?'disabled':''}>${ready?'Peru valmius':busy?'Odota hetki…':'Valmiina'}</button>
       <button class="btn btn-secondary btn-full" style="margin-top:10px" data-action="leave">Takaisin etusivulle</button>
     </div>${renderPlayers('lobby')}</section>`;
 }

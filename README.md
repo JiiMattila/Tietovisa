@@ -15,14 +15,14 @@ Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla
 - Tulosruudun **Pelaa uudestaan** lähettää muille pelaajille 30 sekunnin uusintakutsun. Hyväksyneet siirtyvät uuteen odotushuoneeseen samalla aihevalintatavalla.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
 - Taustamusiikki ja peliäänet käynnistyvät sivun ensimmäisen painalluksen jälkeen. Yläreunan kytkimet säätävät niitä erikseen, ja selain muistaa valinnat.
-- API-asiakkaat voivat edelleen pyytää Geminiä luomaan valitsemansa vapaan aiheen kysymykset huoneen luonnin yhteydessä.
+- Gemini luo uusia kysymyksiä molemmissa aihevalintatavoissa ja uusintapeleissä. API-asiakkaat voivat edelleen määrittää oman aiheensa.
 - Ilman Gemini-avainta käytettävissä ovat kysymyspankki ja **120 valmista yleistietokysymystä**. Demotilassa valittu aihealue ja vaikeustaso eivät muuta kysymyksiä.
 
 ## Mitä tarvitaan?
 
 1. [Supabase](https://supabase.com/) – pelien ja pelaajien yhteinen tietokanta.
 2. [Netlify](https://www.netlify.com/) – selainkäyttöliittymän ja palvelinfunktioiden julkaisu.
-3. Valinnainen [Google Gemini API](https://aistudio.google.com/) – uudet, vapaasti valittavien aiheiden kysymykset. **Geminin maksuttomalla API-tasolla on käyttörajoitukset.**
+3. Valinnainen [Google Gemini API](https://aistudio.google.com/) – uudet pelikysymykset ja kysymyspankin täydentäminen. **Geminin maksuttomalla API-tasolla on käyttörajoitukset.**
 
 Pelkkä HTML:n pudottaminen Netlify Dropiin **ei riitä**, sillä peli vaatii palvelinfunktiot ja Supabase-tietokannan. Julkaise koko lähdekoodiprojekti GitHub-integraatiolla tai Netlify CLI:llä.
 
@@ -52,7 +52,7 @@ Pelkkä HTML:n pudottaminen Netlify Dropiin **ei riitä**, sillä peli vaatii pa
   | `SUPABASE_URL` | `https://xxxxx.supabase.co` |
   | `SUPABASE_SECRET_KEY` | `sb_secret_...` — Supabasen yksityinen avain |
   | `GEMINI_API_KEY` | Valinnainen: `Google AI Studion API-avain` |
-  | `GEMINI_MODEL` | Valinnainen, oletus `gemini-2.5-flash-lite` |
+  | `GEMINI_MODEL` | Valinnainen, oletus `gemini-3.5-flash-lite` |
 
 - Tee uusi deploy, kun ympäristömuuttujat on lisätty.
 - Avaa Netlifyn antama `https://...netlify.app`-osoite.
@@ -111,21 +111,22 @@ Lähdekoodi on tarkoitettu omaksi muokattavaksi pohjaksi. Tietokantaa ja ulkoisi
 
 1. Avaa [Google AI Studio](https://aistudio.google.com/apikey) ja kirjaudu Google-tilillä.
 2. Luo API-avain projektille, jossa on maksuton käyttö eikä maksullista laskutusta ole aktivoitu. Tarkista kulloinkin voimassa olevat kiintiöt ja saatavuus Google AI Studiosta.
-3. Lisää Netlifyn **Project configuration → Environment variables** -kohtaan `GEMINI_API_KEY` ja sen arvoksi luomasi avain. Halutessasi lisää `GEMINI_MODEL=gemini-2.5-flash-lite`.
+3. Lisää Netlifyn **Project configuration → Environment variables** -kohtaan `GEMINI_API_KEY` ja sen arvoksi luomasi avain. `GEMINI_MODEL` on valinnainen.
 4. Poista vanhat `OPENAI_API_KEY` ja `OPENAI_MODEL` Netlifyn asetuksista: niitä ei enää käytetä.
 5. Tee Netlifyssä uusi deploy ja kokeile luoda peli.
 
 Gemini-avainta ei koskaan laiteta HTML:ään, selaimen JavaScriptiin eikä GitHubiin. Avain kulkee vain Netlify-palvelinfunktiosta Googlelle. Jos kysymysten generointi epäonnistuu, peli käyttää kysymyspankkia ja tarvittaessa demokysymyksiä. Kysymysten faktuaalista oikeellisuutta ei voida taata automaattisesti.
 
 
-## Automaattisesti kasvava kysymyspankki (uusi versio)
+## Automaattisesti kasvava kysymyspankki
 
-- Kun API-asiakas pyytää Geminiä luomaan kysymykset omasta aiheesta, peli pyytää myös **10 varakysymystä**.
+- Kaikkien aihealueiden pelissä Geminiltä pyydetään kysymykset huonetta luotaessa. Pelaajien valitsemissa aiheissa ja uusintapeleissä kysymykset haetaan, kun kaikki ovat valmiita.
+- Peli pyytää samalla **20 ylimääräistä kysymystä** eri aihealueilta. Aiheet jaetaan tasaisesti, ja useammin käytettävät aiheet arvotaan. Ylimääräiset kysymykset tallennetaan pankkiin tulevia pelejä varten.
 - Uudet, suodatetut Gemini-kysymykset tallennetaan Supabasen `quiz_question_bank`-tauluun. Normalisoitu kysymystunniste estää saman kysymystekstin tallentamisen kahdesti.
 - Peli vertaa kysymyksiä kymmenen viimeisimmän huoneen kysymyksiin. Gemini saa aiempia kysymystekstejä vältettäväksi, ja peli suodattaa myös läheiset sanamuodot, joilla on sama oikea vastaus.
 - Pelin aihealueet ovat maantieto, historia, tiede, luonto, kirjallisuus ja taide, musiikki, suomalainen musiikki, elokuvat, urheilu, teknologia, matematiikka sekä ruoka ja juoma. Peli suosii kysymyksiä, joita ei ole ollut viime peleissä. Pelaajien valitsemassa pelissä kysymykset poimitaan mahdollisimman tasaisesti varatuista aiheista ja niitä täydennetään tarvittaessa saman aiheen lähimmältä vaikeustasolta. Jos kysymyksiä on vähemmän kuin pelaajia, mukaan mahtuvat aiheet arvotaan.
-- Jos uusia kysymyksiä ei saada tarpeeksi, käytetään saman aihealueen ja vaikeustason kysymyspankkia ja sitten varakysymyksiä. Jos varavalikoima on jo käyty läpi, pisimpään poissa olleet varakysymykset palaavat ensin.
+- Jos Gemini ei tuota tarpeeksi uusia kysymyksiä, peli täydentää kierrokset kysymyspankista. Kaikkien aihealueiden peleissä on myös demovaravalikoima. Jos varavalikoima on jo käyty läpi, pisimpään poissa olleet kysymykset palaavat ensin.
 - Ilman `GEMINI_API_KEY`-avainta peli toimii kysymyspankilla ja demokysymyksillä. Ilmaiskiintiö ei ole rajaton; kysymysten generointi voi myös epäonnistua muista syistä.
-- **Tärkeä päivitys vanhaan Supabaseen:** suorita **päivitetty koko `supabase.sql`** Supabase SQL Editorissa uudelleen, sillä myös `quiz_create_room`-funktion sallittuja lähdearvoja on muutettu. SQL käyttää `create or replace`-rakennetta eikä poista aiempia pelihuoneita. Ota silti varmuuskopio ennen muutoksia.
+- Asenna päivitetty `supabase.sql` ennen Netlify-julkaisua. Se sisältää odotushuoneen kysymyshaun käyttämät tietokantafunktiot.
 - Aihealueet ja vaikeustasot erotellaan pankissa. Jos pankissa ei ole sopivaa aihetta, käytetään viimeisenä varana yleistietoa. Kysymyksiä ei ole faktantarkistettu automaattisesti ulkoisista lähteistä.
-- Tarkista toiminta komennoilla `node tests/bank.mjs`, `node tests/question-history.mjs` ja `node tests/smoke.mjs` (testit simuloivat ulkoiset palvelut).
+- Tarkista toiminta ajamalla `node --test tests/*.mjs`. Testit simuloivat Geminiä ja Supabase-yhteyttä.

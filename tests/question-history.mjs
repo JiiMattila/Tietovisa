@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import handler from '../netlify/functions/api.mjs';
 import { getDemoQuestions } from '../netlify/functions/question-bank.mjs';
+import { geminiBatch, geminiResponse } from './fixtures/gemini.mjs';
 
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_fixture';
@@ -43,7 +44,6 @@ assert.equal(new Set(firstCycle).size, 120, 'All demo questions must be used bef
 const revisited = await create('Testiaihe ilman pankkia');
 assert.deepEqual(new Set(revisited.p_questions.map(fingerprint)), new Set(rooms[0].p_questions.map(fingerprint)));
 
-process.env.GEMINI_API_KEY = 'unused-with-varied';
 globalThis.fetch = async (url, options) => {
   const params = JSON.parse(options.body);
   if (url.endsWith('/quiz_recent_questions')) return Response.json(rooms[0].p_questions.map(recentEntry));
@@ -57,7 +57,7 @@ globalThis.fetch = async (url, options) => {
     })));
   }
   if (url.endsWith('/quiz_create_room')) return saveRoom(params);
-  assert.fail('Vapaa must fetch the diversified bank, not Gemini or an exact topic lookup');
+  assert.fail('Without a Gemini key, Vapaa must fetch the diversified bank');
 };
 const varied = await create('Vapaa aihealue', topics.length);
 assert.equal(varied.p_topic, 'Vapaa');
@@ -70,30 +70,37 @@ const original = {
   explanation:'Kaupungin vanhin puisto on Puistola.'
 };
 const rephrased = {...original,text:'Mikä on kaupungin keskustan kaikkein vanhimman puiston nimi?'};
-const unique = demos.slice(0, 13);
-let calls = 0;
+const unique = demos.slice(0, 24);
+const saved = [];
+process.env.GEMINI_API_KEY = 'gemini-test-fixture';
 globalThis.fetch = async (url, options) => {
   const params = JSON.parse(options.body);
   if (url.endsWith('/quiz_recent_questions')) return Response.json([recentEntry(original)]);
   if (url.includes('generativelanguage.googleapis.com')) {
-    const prompt = params.contents[0].parts[0].text;
+    const { count, categories, prompt } = geminiBatch(params);
     assert.ok(prompt.includes(original.text));
-    if (calls++ === 0) return Response.json(gemini([original,rephrased,...unique.slice(0,3)]));
-    assert.ok(prompt.includes(unique[0].text), 'The second request excludes questions from the first');
-    return Response.json(gemini(unique.slice(3)));
+    return count === 5
+      ? geminiResponse([original, rephrased, ...unique.slice(0, 3)], categories)
+      : geminiResponse([unique[0], ...unique.slice(3, 22)], categories);
+  }
+  if (url.endsWith('/quiz_bank_pick')) {
+    assert.equal(params.p_limit, 2);
+    assert.ok(params.p_exclude.includes(fingerprint(original)));
+    return Response.json(unique.slice(22));
   }
   if (url.endsWith('/quiz_bank_save')) {
-    assert.equal(params.p_items.length, 13);
-    assert.ok(!params.p_items.some(q => q.text === original.text || q.text === rephrased.text));
-    return Response.json(13);
+    saved.push(...params.p_items);
+    return Response.json(params.p_items.length);
   }
   if (url.endsWith('/quiz_create_room')) return saveRoom(params);
   assert.fail('Unexpected RPC ' + url);
 };
-function gemini(questions) {
-  return {candidates:[{content:{parts:[{text:JSON.stringify({questions})}]}}]};
-}
 const generated = await create('Testipuistot', 5);
-assert.equal(generated.p_question_source, 'ai');
+assert.equal(generated.p_question_source, 'mixed');
 assert.ok(generated.p_questions.every(q => q.text !== original.text && q.text !== rephrased.text));
+assert.deepEqual(new Set(generated.p_questions.map(q => q.text)),
+  new Set([...unique.slice(0, 3), ...unique.slice(22)].map(q => q.text)));
+assert.equal(saved.length, 22);
+assert.equal(new Set(saved.map(q => q.fingerprint)).size, saved.length);
+assert.ok(!saved.some(q => q.text === original.text || q.text === rephrased.text));
 console.log('OK: demo history rotation, diversified selection, Gemini exclusion and paraphrase filtering.');
