@@ -1,4 +1,6 @@
-// Alkuperäiset, paikalliset esimerkkikysymykset. AI-avain mahdollistaa vapaat aihealueet.
+import { randomInt } from 'node:crypto';
+
+// Paikalliset varakysymykset. AI-avain mahdollistaa vapaat aihealueet.
 const bank = [
   ['Minkä maan pääkaupunki on Canberra?',['Kanada','Australia','Uusi-Seelanti','Etelä-Afrikka','Yhdysvallat'],1,'Canberra on Australian pääkaupunki.'],
   ['Mikä alkuaine on kemialliselta merkiltään Fe?',['Fluori','Fosfori','Rauta','Hopea','Kupari'],2,'Fe tarkoittaa rautaa (latinaksi ferrum).'],
@@ -49,15 +51,96 @@ const bank = [
   ['Mikä seuraavista on merieläin?',['Hirvi','Delfiini','Ilves','Poro','Orava'],1,'Delfiinit ovat vedessä eläviä nisäkkäitä.'],
   ['Mihin maahan Eiffel-torni kuuluu?',['Italia','Saksa','Ranska','Espanja','Belgia'],2,'Eiffel-torni sijaitsee Pariisissa, Ranskassa.'],
   ['Mikä on neliön sisäkulmien summa?',['180°','270°','360°','450°','540°'],2,'Nelikulmion sisäkulmien summa on 360 astetta.'],
-  ['Mikä on ensimmäinen alkuaine jaksollisessa järjestelmässä?',['Helium','Vety','Happi','Hiili','Litium'],1,'Vedyn järjestysluku on 1.']
+  ['Mikä on ensimmäinen alkuaine jaksollisessa järjestelmässä?',['Helium','Vety','Happi','Hiili','Litium'],1,'Vedyn järjestysluku on 1.'],
+
+  ['Mikä kaupunki isännöi vuoden 1952 kesäolympialaisia?',['Tukholma','Helsinki','Oslo','Lontoo','Kööpenhamina'],1,'Vuoden 1952 kesäolympialaiset pidettiin Helsingissä.'],
+  ['Minkä kaupungin edustalla Suomenlinna sijaitsee?',['Turku','Hanko','Helsinki','Kotka','Rauma'],2,'Suomenlinna sijaitsee Helsingin edustalla.'],
+  ['Minkä kaupungin halki virtaa Aurajoki?',['Oulu','Pori','Vaasa','Turku','Porvoo'],3,'Aurajoki kulkee Turun keskustan läpi.'],
+  ['Mikä kaupunki sijaitsee Näsijärven ja Pyhäjärven välisellä kannaksella?',['Tampere','Lahti','Mikkeli','Kuopio','Jyväskylä'],0,'Tampereen keskusta on Näsijärven ja Pyhäjärven välissä.'],
+  ['Mikä on Ahvenanmaan ainoa kaupunki?',['Eckerö','Finström','Jomala','Kumlinge','Maarianhamina'],4,'Maarianhamina on Ahvenanmaan ainoa kaupunki.'],
+  ['Minkä meren rannikolla Dubrovnik sijaitsee?',['Itämeri','Adrianmeri','Mustameri','Pohjanmeri','Joonianmeri'],1,'Dubrovnik sijaitsee Kroatiassa Adrianmeren rannalla.'],
+  ['Minkä maan pääkaupunki on Wellington?',['Australia','Fidži','Uusi-Seelanti','Samoa','Tonga'],2,'Wellington sijaitsee Uuden-Seelannin Pohjoissaarella.'],
+  ['Minkä vuorijonon alueella sijaitsee Mount Everest?',['Alpit','Andit','Kalliovuoret','Atlasvuoret','Himalaja'],4,'Mount Everest sijaitsee Himalajalla Nepalin ja Kiinan rajalla.'],
+  ['Mikä joki virtaa Budapestin halki?',['Rein','Tonava','Seine','Veiksel','Elbe'],1,'Tonava erottaa Budapestin Budan ja Pestin puolet toisistaan.'],
+  ['Mitkä valtameret Panaman kanava yhdistää?',['Tyynenmeren ja Intian valtameren','Atlantin ja Tyynenmeren','Atlantin ja Intian valtameren','Jäämeren ja Atlantin','Jäämeren ja Tyynenmeren'],1,'Kanava yhdistää Atlantin puolella Karibianmeren Tyynenmereen.'],
+  ['Mitä kahta maata Pyreneiden vuoristo pääosin erottaa?',['Ranskaa ja Saksaa','Italiaa ja Itävaltaa','Espanjaa ja Portugalia','Ranskaa ja Espanjaa','Saksaa ja Sveitsiä'],3,'Pyreneet ulottuvat Ranskan ja Espanjan rajalle.'],
+  ['Millä mantereella sijaitsee Namibin aavikko?',['Aasia','Afrikka','Etelä-Amerikka','Eurooppa','Australia'],1,'Namibin aavikko ulottuu Afrikan lounaisrannikolle.'],
+
+  ['Mikä alkuaine on jaksollisessa järjestelmässä merkitty tunnuksella Na?',['Typpi','Neon','Nikkeli','Natrium','Rikki'],3,'Natriumin kemiallinen merkki on Na.'],
+  ['Mikä on voiman SI-yksikkö?',['Joule','Watti','Pascal','Voltti','Newton'],4,'Voima ilmaistaan newtoneina (N).'],
+  ['Kuinka monta luuta on ihmisen peukalossa, kun kämmenluuta ei lasketa?',['Yksi','Kaksi','Kolme','Neljä','Viisi'],1,'Peukalossa on kaksi sormiluuta. Muissa sormissa on kolme.'],
+  ['Mikä eläin tunnetaan kolmesta sydämestään?',['Kilpikonna','Krokotiili','Ahven','Mustekala','Hylje'],3,'Mustekalan kaksi kidussydäntä pumppaavat verta kiduksiin ja kolmas muualle kehoon.'],
+  ['Mikä on maapallon kuoren ja ytimen välinen kerros?',['Vaippa','Ilmakehä','Otsonikerros','Mannerjalusta','Merivirta'],0,'Maan vaippa ulottuu kuoren alapuolelta ytimen rajalle.'],
+  ['Mikä seuraavista on Saturnuksen kuu?',['Europa','Phobos','Titan','Triton','Kallisto'],2,'Titan on Saturnuksen suurin kuu.'],
+  ['Mikä planeetta kiertää Aurinkoa Saturnuksen ja Neptunuksen ratojen välissä?',['Merkurius','Jupiter','Venus','Mars','Uranus'],4,'Uranuksen rata on Saturnuksen radan ulkopuolella ja Neptunuksen radan sisäpuolella.'],
+  ['Mikä prosessi muuttaa nestemäisen veden vesihöyryksi veden pinnalta?',['Tiivistyminen','Haihtuminen','Sublimoituminen','Jäätyminen','Härmistyminen'],1,'Haihtumisessa nestettä muuttuu kaasuksi sen pinnalta.'],
+  ['Mikä eläin rakentaa veteen patoja oksista ja mudasta?',['Saukko','Majava','Minkki','Kettu','Vesimyyrä'],1,'Majavat rakentavat patoja vedenpinnan nostamiseksi.'],
+  ['Mikä yhdiste antaa sitruunan mehulle suuren osan sen happamuudesta?',['Ruokasuola','Sitruunahappo','Ruokasooda','Tärkkelys','Etanoli'],1,'Sitruunamehussa on luonnostaan sitruunahappoa.'],
+  ['Mitä vitamiinia iho muodostaa auringon UVB-säteilyn vaikutuksesta?',['A-vitamiinia','B12-vitamiinia','C-vitamiinia','D-vitamiinia','K-vitamiinia'],3,'Ihon D-vitamiinin muodostus käynnistyy UVB-säteilyn vaikutuksesta.'],
+  ['Mikä linnun ruumiinosa on pääosin keratiinia ja kasvaa höyhentupesta?',['Nokka','Kynsi','Höyhen','Rintalasta','Silmäluomi'],2,'Höyhenet kasvavat ihon höyhentupista ja ovat pääosin keratiinia.'],
+  ['Mikä on ihmiskehossa äänen muodostamiseen keskeisesti osallistuva elin?',['Ruokatorvi','Henkitorvi','Kurkunpää','Maksa','Pallea'],2,'Äänihuulet sijaitsevat kurkunpäässä, jossa niiden värähtely tuottaa ääntä.'],
+  ['Kuinka monta nikamaa ihmisen kaularangassa tavallisesti on?',['Viisi','Kuusi','Seitsemän','Kahdeksan','Yhdeksän'],2,'Ihmisen kaularanka koostuu seitsemästä nikamasta.'],
+  ['Mikä näistä on sieni?',['Saniaisen itiö','Jäkälän leväosakas','Metsätähti','Kanttarelli','Sinilevä'],3,'Kanttarelli eli keltavahvero on ruokasieni.'],
+  ['Mitä väriä lakmuspaperi näyttää happamassa liuoksessa?',['Punaista','Vihreää','Sinistä','Mustaa','Oranssia'],0,'Happamassa liuoksessa lakmus muuttuu punaiseksi.'],
+
+  ['Kuka loi Muumilaakson hahmot?',['Astrid Lindgren','Tove Jansson','Kirsi Kunnas','Anni Swan','Beatrix Potter'],1,'Tove Jansson kirjoitti ja kuvitti alkuperäiset muumikirjat.'],
+  ['Kuka kirjoitti romaanin Tuntematon sotilas?',['Aleksis Kivi','Väinö Linna','Mika Waltari','Ilmari Kianto','Juhani Aho'],1,'Väinö Linnan Tuntematon sotilas ilmestyi vuonna 1954.'],
+  ['Kuka kokosi Kalevalan kansanrunoista?',['Eino Leino','Johan Ludvig Runeberg','Elias Lönnrot','Mikael Agricola','Aleksis Kivi'],2,'Elias Lönnrot kokosi Kalevalan suullisesta runoperinteestä.'],
+  ['Kuka kirjoitti Peppi Pitkätossusta kertovat alkuperäiset kirjat?',['Tove Jansson','Astrid Lindgren','Sven Nordqvist','Selma Lagerlöf','H. C. Andersen'],1,'Peppi Pitkätossu on ruotsalaisen Astrid Lindgrenin luoma hahmo.'],
+  ['Kuka kirjoitti romaanin Sinuhe egyptiläinen?',['Eino Leino','Volter Kilpi','Väinö Linna','Mika Waltari','Arto Paasilinna'],3,'Mika Waltarin Sinuhe egyptiläinen ilmestyi vuonna 1945.'],
+  ['Kuka loi salapoliisihahmon Sherlock Holmes?',['Agatha Christie','Arthur Conan Doyle','Edgar Allan Poe','Jules Verne','Charles Dickens'],1,'Arthur Conan Doyle esitteli Sherlock Holmesin vuonna 1887.'],
+  ['Kuka maalasi teoksen Tähtikirkas yö vuonna 1889?',['Claude Monet','Paul Gauguin','Vincent van Gogh','Salvador Dalí','Henri Matisse'],2,'Tähtikirkas yö on Vincent van Goghin maalaus.'],
+  ['Mikä on Picasso-taulun Guernica aiheena?',['Kuunpimennys','Kaupungin pommitus','Junaonnettomuus','Meritaistelu','Tanssiesitys'],1,'Guernica käsittelee samannimisen baskikaupungin pommitusta vuonna 1937.'],
+  ['Kuka sävelsi baletin Joutsenlampi?',['Igor Stravinsky','Pjotr Tšaikovski','Sergei Prokofjev','Claude Debussy','Johannes Brahms'],1,'Joutsenlammen musiikin sävelsi Pjotr Tšaikovski.'],
+  ['Kuinka monta kieltä tavallisessa akustisessa kitarassa on?',['Neljä','Viisi','Kuusi','Seitsemän','Kahdeksan'],2,'Tavallisessa akustisessa kitarassa on kuusi kieltä.'],
+  ['Mihin soitinryhmään fagotti kuuluu?',['Jousisoittimiin','Vaskipuhaltimiin','Lyömäsoittimiin','Puupuhaltimiin','Koskettimiin'],3,'Fagotti on kaksilehdykkäinen puupuhallin.'],
+  ['Missä kaupungissa The Beatles -yhtye perustettiin?',['Lontoo','Manchester','Edinburgh','Birmingham','Liverpool'],4,'The Beatles perustettiin Liverpoolissa vuonna 1960.'],
+  ['Kuka oli ensimmäinen Kuussa kävellyt ihminen?',['Buzz Aldrin','Juri Gagarin','Michael Collins','Neil Armstrong','Jim Lovell'],3,'Neil Armstrong astui Kuun pinnalle Apollo 11 -lennolla vuonna 1969.'],
+  ['Minä vuonna Berliinin muuri avattiin vapaalle ylitykselle?',['1979','1985','1989','1993','1999'],2,'Berliinin muurin rajanylityspaikat avattiin marraskuussa 1989.'],
+  ['Minä vuonna Suomi liittyi Euroopan unioniin?',['1992','1993','1995','1997','1999'],2,'Suomi liittyi EU:hun vuoden 1995 alussa.'],
+  ['Kuka oli Suomen ensimmäinen presidentti?',['P. E. Svinhufvud','C. G. E. Mannerheim','K. J. Ståhlberg','J. K. Paasikivi','Lauri Kristian Relander'],2,'K. J. Ståhlberg valittiin Suomen ensimmäiseksi presidentiksi vuonna 1919.'],
+  ['Kuka oli ensimmäinen avaruudessa käynyt ihminen?',['John Glenn','Neil Armstrong','Alan Shepard','Juri Gagarin','Valentina Tereškova'],3,'Juri Gagarin lensi Vostok 1 -aluksella avaruuteen vuonna 1961.'],
+  ['Minkä laivan uppoaminen tapahtui sen neitsytmatkalla vuonna 1912?',['Lusitania','Titanic','Britannic','Queen Mary','Olympic'],1,'Titanic törmäsi jäävuoreen neitsytmatkallaan vuonna 1912.'],
+  ['Mikä antiikin valtakunta tunnetaan kuningas Hammurabin lakikokoelmasta?',['Assyria','Sumer','Babylonia','Egypti','Kreikka'],2,'Hammurabi oli Babylonian kuningas.'],
+
+  ['Mikä on selaimen ja verkkopalvelimen välisessä viestinnässä käytetyn HTTPS-protokollan S-kirjaimen merkitys?',['Secure','Server','Standard','Simple','System'],0,'HTTPS:n S tulee sanasta Secure.'],
+  ['Mitä bittiarvoja binäärilukujärjestelmä käyttää?',['1 ja 2','0 ja 2','0 ja 1','1 ja 9','2 ja 10'],2,'Binäärijärjestelmässä numerot muodostetaan nollista ja ykkösistä.'],
+  ['Kuinka monta bittiä on yhdessä tavussa?',['4','6','8','10','16'],2,'Yhteen tavuun kuuluu kahdeksan bittiä.'],
+  ['Mikä seuraavista kuvamuodoista tukee läpinäkyvyyttä alfakanavalla?',['JPEG','PNG','BMP ilman alfakanavaa','PPM','PBM'],1,'PNG voi sisältää alfakanavan osittaista tai täydellistä läpinäkyvyyttä varten.'],
+  ['Mikä näistä muodostaa tavallisesti verkkotunnuksen ja IP-osoitteen välisen yhteyden?',['DNS','USB','HDMI','JPEG','PDF'],0,'DNS hakee verkkotunnuksille esimerkiksi niihin liitetyt IP-osoitteet.'],
+  ['Mihin suuntaan shakin lähetti liikkuu?',['Vain ylöspäin','Suoraan riveillä','Vain yhden ruudun','Vinottain','L-kirjaimen muotoisesti'],3,'Lähetti liikkuu esteettömiä viistorivejä pitkin.'],
+  ['Kuinka monta ruutua tavallisella shakkilaudalla on?',['36','49','64','72','81'],2,'Shakkilaudalla on kahdeksan riviä ja kahdeksan saraketta.'],
+  ['Mitä Go-lautapelissä asetetaan vuorotellen laudalle?',['Kiviä','Kortteja','Noppia','Helmiä','Pelinappuloita, joissa on kirjaimia'],0,'Gossa pelaajat asettavat vuorotellen mustia ja valkoisia kiviä laudalle.'],
+  ['Mikä komento näyttää Gitissä työhakemiston ja indeksin tilan?',['git clone','git branch','git status','git fetch','git log'],2,'git status näyttää muun muassa muokatut ja valmistellut tiedostot.'],
+  ['Mihin UTF-8:aa käytetään?',['Videon pakkaamiseen','Tekstimerkkien koodaamiseen','Verkon nopeuden mittaamiseen','IP-osoitteiden jakamiseen','Levyn sisällön salaukseen'],1,'UTF-8 esittää Unicode-merkit yhdellä, kahdella, kolmella tai neljällä tavulla.'],
+  ['Mikä tiedonsiirtotapa käyttää valoa ohuissa kuiduissa?',['Valokuitu','Koaksiaalikaapeli','Parikaapeli','Bluetooth','NFC'],0,'Valokuitu kuljettaa tietoa valopulsseina.'],
+
+  ['Kuinka monesta renkaasta olympiatunnus muodostuu?',['Kolmesta','Neljästä','Viidestä','Kuudesta','Seitsemästä'],2,'Olympiatunnuksessa on viisi toisiinsa kytkeytyvää rengasta.'],
+  ['Mikä on maratonin virallinen pituus kilometreinä?',['40','41,2','42','42,195','43,5'],3,'Maraton on 42 kilometriä ja 195 metriä pitkä.'],
+  ['Mikä urheilulaji tunnetaan termeistä birdie ja bogey?',['Golf','Keilailu','Tennis','Lentopallo','Ratsastus'],0,'Golfissa birdie on yksi lyönti alle parin ja bogey yksi yli parin.'],
+  ['Kuinka monta pelaajaa lentopallojoukkueella on kentällä sisälentopallossa?',['Neljä','Viisi','Kuusi','Seitsemän','Kahdeksan'],2,'Sisälentopallossa kummallakin joukkueella on kentällä kuusi pelaajaa.'],
+  ['Mikä on kuution särmien lukumäärä?',['6','8','10','12','16'],3,'Kuution kuutta tahkoa rajaavat yhteensä 12 särmää.'],
+  ['Mikä on luvun 144 positiivinen neliöjuuri?',['10','11','12','13','14'],2,'Luku 12 kerrottuna itsellään on 144.'],
+  ['Mitä roomalaista lukua merkitsee kirjain L?',['10','25','50','100','500'],2,'Roomalaisissa numeroissa L merkitsee lukua 50.'],
+  ['Kuinka monta astetta on puolikkaassa täydessä kierroksessa?',['45°','90°','120°','180°','270°'],3,'Täysi kierros on 360 astetta, joten puolikas kierros on 180 astetta.'],
+  ['Mikä palkokasvi on hummuksen perinteinen pääraaka-aine?',['Linssi','Kikherne','Tarhaherne','Mustapapu','Soijapapu'],1,'Hummus tehdään tavallisesti kypsistä kikherneistä.'],
+  ['Mikä mauste saadaan sahramikrookuksen luoteista?',['Kaneli','Paprikajauhe','Sahrami','Kurkuma','Inkivääri'],2,'Sahrami valmistetaan kuivaamalla sahramikrookuksen kukan luotit.'],
+  ['Mikä kuukausi on karkausvuonna 29 päivän mittainen?',['Tammikuu','Helmikuu','Maaliskuu','Huhtikuu','Kesäkuu'],1,'Karkauspäivä lisätään helmikuun loppuun.'],
+  ['Mikä kieli kuuluu uralilaiseen kielikuntaan?',['Islanti','Puola','Viro','Latvia','Tanska'],2,'Viro ja suomi kuuluvat uralilaiseen kielikuntaan.']
 ];
 
-export function getDemoQuestions(count) {
-  // Turvallinen järjestyssekoitus ja kunkin kysymyksen vastausvaihtoehtojen sekoitus.
-  const shuffled = [...bank].sort(() => Math.random() - 0.5).slice(0, count);
-  return shuffled.map(([text, options, answerIndex, explanation]) => {
-    const shuffledOptions = options.map((value, index) => ({ value, index }))
-      .sort(() => Math.random() - 0.5);
+export function shuffle(items) {
+  const shuffled = [...items];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+export function getDemoQuestions(count = bank.length) {
+  return shuffle(bank).slice(0, count).map(([text, options, answerIndex, explanation]) => {
+    const shuffledOptions = shuffle(options.map((value, index) => ({ value, index })));
     return {
       text,
       options: shuffledOptions.map(({ value }) => value),

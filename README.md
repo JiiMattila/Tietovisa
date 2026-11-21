@@ -8,11 +8,12 @@ Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla
 - 5/10/15/20/30 kysymystä, **viisi vastausvaihtoehtoa** ja aina yksi oikea.
 - Valittava vastausaika (10–60 sekuntia) ja kolme vaikeustasoa.
 - Sama kysymys kaikille. Valintaa voi vaihtaa, kunnes kaikki ovat vastanneet tai vastausaika päättyy.
+- **Vapaa** kokoaa kysymykset useista kategorioista valitulla vaikeustasolla. Kysymyksen oma kategoria näkyy pelissä.
 - Oikeasta lopullisesta valinnasta saa 600–1000 pistettä sen lähetysajan mukaan.
 - Välitulokset, oikean vastauksen paljastus ja lopulliset sijoitukset.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
 - Kysymykset voidaan luoda Gemini API:lla **huoneen luontivaiheessa**, jotta kierrosten väliin ei tule tekoälyviivettä.
-- Ilman Gemini-avainta käytettävissä on **50 valmista yleistietokysymystä**. Demotilassa valittu aihealue ja vaikeustaso eivät muuta kysymyksiä.
+- Ilman Gemini-avainta käytettävissä ovat kysymyspankki ja **120 valmista yleistietokysymystä**. Demotilassa valittu aihealue ja vaikeustaso eivät muuta kysymyksiä.
 
 ## Mitä tarvitaan?
 
@@ -85,7 +86,7 @@ netlify-tietovisa/
 ├── netlify/
 │   └── functions/
 │       ├── api.mjs        # Netlify API + Gemini-kysymysgenerointi
-│       └── question-bank.mjs # 50 valmista demokysymystä
+│       └── question-bank.mjs # 120 valmista demokysymystä
 ├── supabase.sql           # tietokantataulut ja palvelimen RPC-funktiot
 ├── netlify.toml           # Netlify-konfiguraatio
 ├── .env.example           # ympäristömuuttujien malli
@@ -110,15 +111,17 @@ Lähdekoodi on tarkoitettu omaksi muokattavaksi pohjaksi. Tietokantaa ja ulkoisi
 4. Poista vanhat `OPENAI_API_KEY` ja `OPENAI_MODEL` Netlifyn asetuksista: niitä ei enää käytetä.
 5. Tee Netlifyssä uusi deploy ja kokeile luoda peli.
 
-Gemini-avainta ei koskaan laiteta HTML:ään, selaimen JavaScriptiin eikä GitHubiin. Avain kulkee vain Netlify-palvelinfunktiosta Googlelle. Jos Gemini palauttaa kiintiövirheen 429 tai tilapäisen 503-virheen, peli käyttää demokysymyksiä; muissa API-virheissä pelinluonti näyttää virheen. Generoituja kysymyksiä ei tässä versiossa tallenneta erilliseen uudelleenkäytettävään kysymyspankkiin, vaan ne tallentuvat kyseiseen pelihuoneeseen. Kysymysten faktuaalista oikeellisuutta ei voida taata automaattisesti.
+Gemini-avainta ei koskaan laiteta HTML:ään, selaimen JavaScriptiin eikä GitHubiin. Avain kulkee vain Netlify-palvelinfunktiosta Googlelle. Jos kysymysten generointi epäonnistuu, peli käyttää kysymyspankkia ja tarvittaessa demokysymyksiä. Kysymysten faktuaalista oikeellisuutta ei voida taata automaattisesti.
 
 
 ## Automaattisesti kasvava kysymyspankki (uusi versio)
 
 - Jokainen uusi peli pyytää Geminiä luomaan pelin kysymykset sekä **10 ylimääräistä varakysymystä** (kahdessa erässä).
-- Kaikki onnistuneesti generoidut kysymykset tallennetaan Supabasen `quiz_question_bank`-tauluun. Saman kysymystekstin normalisoitu SHA-256-tunniste estää täsmällisten tekstimuunnelmien tallentamisen kahdesti. Semanttisesti samansisältöiset eri tavoin kirjoitetut kysymykset voivat silti toistua.
-- Pelissä suositaan uusia kysymyksiä. Jos uusia ei saada tarpeeksi, käytetään saman aihealueen ja vaikeustason vähiten käytettyjä kysymyksiä. Viimeisenä varana käytetään mukana tulevia yleissivistäviä demokysymyksiä.
+- Uudet, suodatetut Gemini-kysymykset tallennetaan Supabasen `quiz_question_bank`-tauluun. Normalisoitu kysymystunniste estää saman kysymystekstin tallentamisen kahdesti.
+- Peli vertaa kysymyksiä kymmenen viimeisimmän huoneen kysymyksiin. Gemini saa aiempia kysymystekstejä vältettäväksi, ja peli suodattaa myös läheiset sanamuodot, joilla on sama oikea vastaus.
+- **Vapaa** käyttää kysymyspankin kategorioita ilman Geminiä. Valinta vuorottelee kategorioiden välillä ja suosii kysymyksiä, joita ei ole ollut viime peleissä. Pelin kysymyspankkiin on lisätty 500 suomenkielistä kysymystä kymmenestä kategoriasta.
+- Jos uusia kysymyksiä ei saada tarpeeksi, käytetään saman aihealueen ja vaikeustason kysymyspankkia ja sitten varakysymyksiä. Jos varavalikoima on jo käyty läpi, pisimpään poissa olleet varakysymykset palaavat ensin.
 - Ilman `GEMINI_API_KEY`-avainta peli toimii kysymyspankilla ja demokysymyksillä. Ilmaiskiintiö ei ole rajaton; kysymysten generointi voi myös epäonnistua muista syistä.
 - **Tärkeä päivitys vanhaan Supabaseen:** suorita **päivitetty koko `supabase.sql`** Supabase SQL Editorissa uudelleen, sillä myös `quiz_create_room`-funktion sallittuja lähdearvoja on muutettu. SQL käyttää `create or replace`-rakennetta eikä poista aiempia pelihuoneita. Ota silti varmuuskopio ennen muutoksia.
 - Aihealueet ja vaikeustasot erotellaan pankissa. Jos pankissa ei ole sopivaa aihetta, käytetään viimeisenä varana yleistietoa. Kysymyksiä ei ole faktantarkistettu automaattisesti ulkoisista lähteistä.
-- Tarkista toiminta komennoilla `node tests/bank.mjs` ja `node tests/smoke.mjs` (testit simuloivat ulkoiset palvelut).
+- Tarkista toiminta komennoilla `node tests/bank.mjs`, `node tests/question-history.mjs` ja `node tests/smoke.mjs` (testit simuloivat ulkoiset palvelut).
