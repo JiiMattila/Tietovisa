@@ -39,6 +39,7 @@ alter table public.quiz_rooms
   add column if not exists rematch_host_id uuid,
   add column if not exists rematch_room_id uuid;
 alter table public.quiz_players add column if not exists rematch_response boolean;
+alter table public.quiz_rooms add column if not exists winner_quote text;
 
 create table if not exists public.quiz_answers (
   room_id uuid not null references public.quiz_rooms(id) on delete cascade,
@@ -126,6 +127,36 @@ begin
 end;
 $$;
 
+create or replace function public.quiz_draw_winner_quote()
+returns text language sql volatile security invoker set search_path = '' as $$
+  select quote from unnest(array[
+    'Elämä on laiffii.',
+    'Jokainen tsäänssi on mahdollisuus.',
+    'Se on ihan fifty-sixty, miten käy.',
+    'Elämä on ihmisen parasta aikaa.',
+    'Huominen on aina tulevaisuutta.',
+    'Tekemätöntä ei saa tekemättömäksi.',
+    'Rakkaus on kuin lankakerä – se alkaa ja loppuu.',
+    'Asiat ovat sekaisin kuin Haminan kaupunki.',
+    'En ole ulkona kuvioista, olen pihalla.',
+    'Onpa mentaalinen olo.',
+    'Elämässä on tullut takapakkia, joskus etupakkiakin.',
+    'Maailma ei lopu Joroisiin!',
+    'Oikein sydäntä lämmittää olla näinkin ylivoimainen.',
+    'Kyllä mä tän ymmärrän, mutta kun mun aivot ei.',
+    'Onni ei ole kaupan.',
+    'Mä tunnen kovan jätkän. Se pelaa shakkia, mutta koskaan ei oo voittanut mattia!',
+    'Sovitaanko, että sinä olet vahtimestari ja minä olen maailmanmestari?',
+    'Ja jos jokin asia on varma, se on aivan varma.',
+    'Lahti on kyllä ihan mesta paikka.',
+    'Olen varautunut jokaiseen päivään. Huomiseenkin.',
+    'Kaiken kokeneena voin sanoa, että vielä on jotain kokematta.',
+    'Elämässäni rahaa ja rakkautta on ollut sopivasti: toisinaan enemmän ja vähemmän.'
+  ]) as quotes(quote)
+  order by random()
+  limit 1;
+$$;
+
 -- Kysymykset etenevät automaattisesti kaikkien vastattua tai ajan päätyttyä.
 -- Pistettä lisätään vasta paljastusvaiheessa, jotta oikea vastaus ei paljastu pisteistä.
 create or replace function public.quiz_advance_room(p_room_id uuid)
@@ -148,11 +179,13 @@ begin
     update public.quiz_rooms set status='reveal', reveal_started_at=v_now where id=r.id;
   elsif r.status='reveal' and v_now >= r.reveal_started_at + interval '6 seconds' then
     if r.round_index+1 >= r.question_total then
-      update public.quiz_rooms set status='finished' where id=r.id;
+      update public.quiz_rooms set status='finished',winner_quote=public.quiz_draw_winner_quote() where id=r.id;
     else
       update public.quiz_rooms set status='question', round_index=r.round_index+1,
         question_started_at=v_now, reveal_started_at=null where id=r.id;
     end if;
+  elsif r.status='finished' and r.winner_quote is null then
+    update public.quiz_rooms set winner_quote=public.quiz_draw_winner_quote() where id=r.id;
   end if;
 end;
 $$;
@@ -373,6 +406,7 @@ begin
     'topics',case when r.topic_mode='players' and r.status='lobby' then public.quiz_topic_names() end,
     'startedAt',r.question_started_at, 'revealAt',r.reveal_started_at,
     'serverNow',clock_timestamp(), 'question',v_public_q,
+    'winnerQuote',case when r.status='finished' then r.winner_quote end,
     'rematch',v_rematch,
     'myAnswer',(select a.choice from public.quiz_answers a where a.room_id=r.id
                  and a.round_index=r.round_index and a.player_id=p_player_id),
@@ -408,6 +442,7 @@ revoke all on function public.quiz_get_state(text,uuid,text) from public, anon, 
 revoke all on function public.quiz_rematch(text,uuid,text,boolean) from public, anon, authenticated;
 revoke all on function public.quiz_finish_rematch(uuid) from public, anon, authenticated;
 revoke all on function public.quiz_advance_room(uuid) from public, anon, authenticated;
+revoke all on function public.quiz_draw_winner_quote() from public, anon, authenticated;
 grant execute on function public.quiz_topic_names() to service_role;
 grant execute on function public.quiz_create_room(text,text,text,integer,integer,text,text,text,jsonb) to service_role;
 grant execute on function public.quiz_create_room(text,text,text,integer,integer,text,text,text,jsonb,text) to service_role;
@@ -421,6 +456,7 @@ grant execute on function public.quiz_get_state(text,uuid,text) to service_role;
 grant execute on function public.quiz_rematch(text,uuid,text,boolean) to service_role;
 grant execute on function public.quiz_finish_rematch(uuid) to service_role;
 grant execute on function public.quiz_advance_room(uuid) to service_role;
+grant execute on function public.quiz_draw_winner_quote() to service_role;
 
 -- Tietokantafunktioiden API-skeeman päivitys PostgRESTille.
 notify pgrst, 'reload schema';

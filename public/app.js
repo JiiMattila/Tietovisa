@@ -3,30 +3,6 @@ import { playGameSound } from './audio.js';
 const app = document.querySelector('#app');
 const toastEl = document.querySelector('#toast');
 const letters = ['A','B','C','D','E'];
-const winnerQuotes = [
-  'Elämä on laiffii.',
-  'Jokainen tsäänssi on mahdollisuus.',
-  'Se on ihan fifty-sixty, miten käy.',
-  'Elämä on ihmisen parasta aikaa.',
-  'Huominen on aina tulevaisuutta.',
-  'Tekemätöntä ei saa tekemättömäksi.',
-  'Rakkaus on kuin lankakerä – se alkaa ja loppuu.',
-  'Asiat ovat sekaisin kuin Haminan kaupunki.',
-  'En ole ulkona kuvioista, olen pihalla.',
-  'Onpa mentaalinen olo.',
-  'Elämässä on tullut takapakkia, joskus etupakkiakin.',
-  'Maailma ei lopu Joroisiin!',
-  'Oikein sydäntä lämmittää olla näinkin ylivoimainen.',
-  'Kyllä mä tän ymmärrän, mutta kun mun aivot ei.',
-  'Onni ei ole kaupan.',
-  'Mä tunnen kovan jätkän. Se pelaa shakkia, mutta koskaan ei oo voittanut mattia!',
-  'Sovitaanko, että sinä olet vahtimestari ja minä olen maailmanmestari?',
-  'Ja jos jokin asia on varma, se on aivan varma.',
-  'Lahti on kyllä ihan mesta paikka.',
-  'Olen varautunut jokaiseen päivään. Huomiseenkin.',
-  'Kaiken kokeneena voin sanoa, että vielä on jotain kokematta.',
-  'Elämässäni rahaa ja rakkautta on ollut sopivasti: toisinaan enemmän ja vähemmän.'
-];
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 let identity = null;
 let state = null;
@@ -214,12 +190,10 @@ function renderFinished() {
   const sorted = [...state.players].sort((a,b) => b.score-a.score);
   const winner = sorted[0];
   const topNames = sorted.filter(p => p.score===winner.score).map(p=>p.name);
-  // Arvottu pelikoodi antaa kaikille pelaajille saman lausahduksen.
-  const quote = winnerQuotes[Number.parseInt(state.code,36) % winnerQuotes.length];
   document.title = 'Lopputulokset — Nörttien Arvauskeskus';
   app.innerHTML = `<section class="podium"><div class="eyebrow">KILPAILU PÄÄTTYNYT</div><div class="winner-trophy">🏆</div>
     <h1 class="winner-name">${escapeHtml(topNames.join(' & '))}</h1>
-    <figure class="winner-quote"><blockquote><p>”${escapeHtml(quote)}”</p></blockquote><figcaption>Matti Nykänen</figcaption></figure>
+    ${state.winnerQuote?`<figure class="winner-quote"><blockquote><p>”${escapeHtml(state.winnerQuote)}”</p></blockquote><figcaption>Matti Nykänen</figcaption></figure>`:''}
     <p>${topNames.length===1?'Onnittelut voittajalle!':'Tasapeli kärjessä!'} Paras pistemäärä: <strong class="highlight">${winner.score.toLocaleString('fi-FI')} p</strong></p></section>
     <section class="finish-board"><div class="panel"><div class="player-header"><h2>Lopputulokset</h2><span class="count-pill">${sorted.length} pelaajaa</span></div><div class="player-list">
     ${sorted.map((p,i)=>`<div class="player"><span class="rank-num">${i+1}.</span><span class="avatar ${i%2?'alt':''}">${escapeHtml(p.name.charAt(0).toUpperCase())}</span><div class="player-grow"><span class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</span></div><span class="score">${p.score.toLocaleString('fi-FI')} p</span></div>`).join('')}</div>

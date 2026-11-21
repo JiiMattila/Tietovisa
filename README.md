@@ -11,6 +11,7 @@ Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla
 - **Kaikki aihealueet** kokoaa kysymykset koko pankista. **Pelaajien valitsemat** käyttää odotushuoneessa varattuja aiheita. Jokainen voi varata yhden vapaan aiheen. Kysymyksen oma aihealue näkyy pelissä.
 - Oikeasta lopullisesta valinnasta saa 600–1000 pistettä sen lähetysajan mukaan.
 - Välitulokset, oikean vastauksen paljastus ja lopulliset sijoitukset.
+- Pelin päättyessä arvottu Matti Nykäsen lausahdus näkyy kaikille pelaajille voittajan nimen alla.
 - Tulosruudun **Pelaa uudestaan** lähettää muille pelaajille 30 sekunnin uusintakutsun. Hyväksyneet siirtyvät uuteen odotushuoneeseen samalla aihevalintatavalla.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
 - Taustamusiikki ja peliäänet käynnistyvät sivun ensimmäisen painalluksen jälkeen. Yläreunan kytkimet säätävät niitä erikseen, ja selain muistaa valinnat.
