@@ -85,3 +85,5 @@
   color: var(--muted);
   font-size: .8rem;
 }
+
+button { touch-action: manipulation; }
