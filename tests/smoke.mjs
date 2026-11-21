@@ -35,6 +35,7 @@ globalThis.fetch = async (url,options) => {
   }
   if (url.endsWith('/quiz_get_state')) return Response.json({status:'lobby',code:body.p_code,players:[]});
   if (url.endsWith('/quiz_start_room')) return Response.json({ok:true});
+  if (url.endsWith('/quiz_set_ready')) return Response.json({ok:true});
   if (url.endsWith('/quiz_submit_answer')) return Response.json({accepted:true});
   throw new Error('Unexpected URL '+url);
 };
@@ -53,8 +54,20 @@ assert.equal(joined.status,200);
 const creds = {code:created.data.code,secret:created.data.secret,playerId:created.data.playerId};
 assert.equal((await post('state',creds)).data.status,'lobby');
 assert.equal((await post('start',creds)).data.ok,true);
+for (const ready of [true, false]) {
+  assert.equal((await post('ready',{...creds,ready})).data.ok,true);
+  assert.ok(sent.at(-1).url.endsWith('/quiz_set_ready'));
+  assert.equal(sent.at(-1).body.p_ready,ready);
+}
+assert.equal((await post('ready',{...creds,ready:'false'})).status,400);
 assert.equal((await post('answer',{...creds,choice:3})).data.accepted,true);
+assert.ok(!Object.hasOwn(sent.at(-1).body,'p_round_index'));
+assert.equal((await post('answer',{...creds,choice:0,roundIndex:0})).data.accepted,true);
+assert.equal(sent.at(-1).body.p_round_index,0);
+assert.equal(sent.at(-1).body.p_choice,0);
+assert.equal((await post('answer',{...creds,choice:3,roundIndex:-1})).status,400);
+assert.equal((await post('answer',{...creds,choice:3,roundIndex:null})).status,400);
 assert.equal((await post('answer',{...creds,choice:5})).status,400);
 assert.equal((await post('state',{...creds,secret:'x'})).status,400);
-console.log('OK: 50 demo questions, creation, join, state, start, answer, invalid input.');
+console.log('OK: 50 demo questions, creation, join, state, readiness, answer, invalid input.');
 console.log(`API mock calls: ${sent.length}`);

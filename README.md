@@ -1,14 +1,14 @@
 # Nörttien Arvauskeskus – moninpelattava tietokilpailu Netlifyyn
 
-Tässä on ensimmäinen pelattava versio selainpohjaisesta tietovisasta. Pelin tekijä osallistuu myös kilpailuun ja käynnistää pelin muiden liityttyä. Yhdessä huoneessa voi olla **enintään 10 pelaajaa** (pelin luoja mukaan lukien).
+Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla **enintään 10 pelaajaa** (pelin luoja mukaan lukien). Peli käynnistyy automaattisesti, kun kaikki huoneessa ovat valmiina.
 
 ## Ominaisuudet
 
 - Pelin luonti ja **6-merkkinen liittymiskoodi**; kaverin voi kutsua linkillä.
 - 5/10/15/20/30 kysymystä, **viisi vastausvaihtoehtoa** ja aina yksi oikea.
 - Valittava vastausaika (10–60 sekuntia) ja kolme vaikeustasoa.
-- Saman kysymyksen näyttäminen kaikille pelaajille; kierros päättyy vastausajan kuluttua tai kaikkien vastattua.
-- Oikeasta vastauksesta 600–1000 pistettä vastausnopeuden mukaan.
+- Sama kysymys kaikille. Valintaa voi vaihtaa, kunnes kaikki ovat vastanneet tai vastausaika päättyy.
+- Oikeasta lopullisesta valinnasta saa 600–1000 pistettä sen lähetysajan mukaan.
 - Välitulokset, oikean vastauksen paljastus ja lopulliset sijoitukset.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
 - Kysymykset voidaan luoda Gemini API:lla **huoneen luontivaiheessa**, jotta kierrosten väliin ei tule tekoälyviivettä.
@@ -60,11 +60,11 @@ Pelkkä HTML:n pudottaminen Netlify Dropiin **ei riitä**, sillä peli vaatii pa
 - Avaa sama Netlify-sivusto kahdella puhelimella tai kahdessa eri selaimessa.
 - Ensimmäinen luo pelin ja valitsee nimimerkin. Hän näkyy itse pelaajalistassa.
 - Toinen syöttää annetun koodin ja oman nimimerkin.
-- Ensimmäinen painaa **Aloita kilpailu**. Kysymysten ja tulosten pitäisi päivittyä kummassakin laitteessa noin 1–2 sekunnin välein.
+- Molemmat painavat **Valmiina**. Peli alkaa, kun molemmat ovat valmiina. Kysymysten ja tulosten pitäisi päivittyä kummassakin laitteessa noin 1–2 sekunnin välein.
 
 ## Pelin toiminta ja rajoitukset
 
-**Palvelintekniikka:** Netlify Function käsittelee pyynnöt `/api/create`, `/api/join`, `/api/start`, `/api/answer` ja `/api/state`. Funktio käyttää Supabasen Data REST API:a ja tietokantafunktioita (RPC). Pelilogiikka, vastausten oikeellisuus ja pisteytys pysyvät palvelinpuolella. Selain ei saa oikeaa vastausta ennen kierroksen paljastusvaihetta. Selain pollaa tilaa 1,25 sekunnin välein; erillistä Supabase Realtime -yhteyttä ei tarvita.
+**Palvelintekniikka:** Netlify Function käsittelee pyynnöt `/api/create`, `/api/join`, `/api/ready`, `/api/answer` ja `/api/state`. Funktio käyttää Supabasen Data REST API:a ja tietokantafunktioita (RPC). Pelilogiikka, vastausten oikeellisuus ja pisteytys pysyvät palvelinpuolella. Selain ei saa oikeaa vastausta ennen kierroksen paljastusvaihetta. Selain pollaa tilaa 1,25 sekunnin välein; erillistä Supabase Realtime -yhteyttä ei tarvita.
 
 **Istunnon palautus:** Pelaajatunniste tallennetaan kyseisen selaimen paikalliseen tallennustilaan, ja huoneen voi avata uudelleen samalla laitteella ja URL-osoitteella. Pelaajaa ei kuitenkaan voi tällä versiolla poistaa huoneesta; 10 paikan katto koskee myös yhteyden katkaisseita pelaajia.
 

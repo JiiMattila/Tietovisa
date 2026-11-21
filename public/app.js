@@ -6,7 +6,7 @@ let identity = null;
 let state = null;
 let loading = false;
 let busy = false;
-let polling = false;
+let polling = null;
 let clockOffset = 0;
 let lastRoundKey = '';
 let toastTimer;
@@ -105,6 +105,7 @@ function renderPlayers(kind='lobby') {
       <div class="avatar ${idx%2?'alt':''}">${escapeHtml(p.name.charAt(0).toUpperCase())}</div>
       <div class="player-grow"><div class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</div>${p.isHost?'<span class="player-flag">PELİN LUOJA</span>':''}${state.status==='reveal'?renderPlayerAnswer(p.choice,state.question):''}</div>
       ${kind==='lobby'?'':`<span class="score">${p.score.toLocaleString('fi-FI')} p</span>`}
+      ${kind==='lobby'?`<span class="status-mark ${p.ready?'done':''}">${p.ready?'✓ Valmis':'◷ Odottaa'}</span>`:''}
       ${kind==='question'?`<span class="status-mark ${p.answered?'done':''}">${p.answered?'✓':'◷'}</span>`:''}
     </div>`).join('')}</div>
     ${kind==='lobby'&&players.length===1?'<p class="subnote">Odotat muita pelaajia. Voit myös kokeilla peliä yksin.</p>':''}
@@ -112,15 +113,15 @@ function renderPlayers(kind='lobby') {
 }
 function renderLobby() {
   document.title = `Odota pelaajia • ${state.code} — Nörttien Arvauskeskus`;
-  const isHost = state.hostId === state.meId;
-  app.innerHTML = `${roomTitle('Odotushuone','Jaa koodi kavereille ja aloita, kun kaikki ovat mukana.','● HUONE AUKI')}
+  const ready = state.players.find(p => p.id===state.meId)?.ready === true;
+  app.innerHTML = `${roomTitle('Odotushuone','Jaa koodi kavereille. Peli alkaa, kun kaikki huoneessa ovat valmiina.','● HUONE AUKI')}
     <section class="layout"><div class="panel">
       <div class="room-label">LIITTYMISKOODI</div>
       <div class="big-code-block"><div class="room-code">${escapeHtml(state.code)}</div><span class="muted">Kerro tämä koodi muille pelaajille</span></div>
       <div class="button-row"><button class="btn btn-secondary btn-small" data-action="copy-code">⧉ Kopioi koodi</button><button class="btn btn-secondary btn-small" data-action="copy-link">↗ Kopioi kutsulinkki</button></div>
       <div class="room-instructions"><strong>${state.total} kysymystä</strong> · ${state.timer} s / kysymys · ${escapeHtml(state.difficulty)}<br>Aihe: <strong>${escapeHtml(state.topic)}</strong><br><br>Kaikki vastaavat samaan kysymykseen omilta laitteiltaan. Nopeus vaikuttaa pisteisiin.</div>
       ${state.source==='demo'?'<div class="demo-alert">⚠ Demotila: käytössä ovat valmiit yleistietokysymykset. Oman aihealueen AI-kysymykset aktivoituvat, kun Gemini API -avain lisätään Netlifyyn.</div>':''}
-      ${isHost?`<button class="btn btn-primary btn-full" data-action="start" ${busy?'disabled':''}>${busy?'Käynnistetään...':'Aloita kilpailu →'}</button>`:'<div class="chip">◷ Pelin luoja käynnistää kilpailun</div>'}
+      <button class="btn ${ready?'btn-secondary':'btn-primary'} btn-full" data-action="ready" data-ready="${!ready}" ${busy?'disabled':''}>${ready?'Peru valmius':'Valmiina'}</button>
       <button class="btn btn-secondary btn-full" style="margin-top:10px" data-action="leave">Takaisin etusivulle</button>
     </div>${renderPlayers('lobby')}</section>`;
 }
@@ -143,9 +144,9 @@ function renderQuestion() {
         else if (reveal && answered && selected===i) classes.push('wrong');
         else if (answered && selected===i) classes.push('selected');
         const icon = reveal && q.answerIndex===i ? '✓' : reveal && answered && selected===i ? '×' : answered && selected===i ? '✓' : '';
-        return `<button data-action="answer" data-choice="${i}" class="${classes.join(' ')}" ${reveal||answered||busy?'disabled':''}><span class="answer-letter">${letters[i]}</span><span class="answer-text">${escapeHtml(option)}</span><span class="answer-icon">${icon}</span></button>`;
+        return `<button data-action="answer" data-choice="${i}" class="${classes.join(' ')}" aria-pressed="${selected===i}" ${reveal||busy?'disabled':''}><span class="answer-letter">${letters[i]}</span><span class="answer-text">${escapeHtml(option)}</span><span class="answer-icon">${icon}</span></button>`;
       }).join('')}</div>
-      ${reveal?`<div class="reveal-explanation"><strong>${answered&&selected===q.answerIndex?'Oikein vastattu!':'Oikea vastaus: '+letters[q.answerIndex]+' — '+escapeHtml(q.options[q.answerIndex])}</strong>${escapeHtml(q.explanation || '')}</div>`:`<p class="game-hint">${answered?'Vastauksesi on lukittu. Odota muita pelaajia.':'Valitse yksi vastaus. Valinta lukitaan heti.'}</p>`}
+      ${reveal?`<div class="reveal-explanation"><strong>${answered&&selected===q.answerIndex?'Oikein vastattu!':'Oikea vastaus: '+letters[q.answerIndex]+' — '+escapeHtml(q.options[q.answerIndex])}</strong>${escapeHtml(q.explanation || '')}</div>`:'<p class="game-hint">Voit vaihtaa vastaustasi, kunnes kaikki ovat vastanneet tai aika loppuu.</p>'}
     </div>${renderPlayers('question')}</section>`;
   updateClock();
 }
@@ -172,6 +173,9 @@ function updateClock() {
   bar.style.width = `${Math.min(100,(left/duration)*100)}%`;
   bar.classList.toggle('low',left<5000);
   number.textContent = Math.ceil(left/1000) + ' s';
+  if (state.status==='question' && left===0) {
+    document.querySelectorAll('[data-action="answer"]:not(:disabled)').forEach(button => button.disabled=true);
+  }
 }
 function render() {
   if (!identity) return renderHome();
@@ -180,11 +184,15 @@ function render() {
   else if (state.status==='question'||state.status==='reveal') renderQuestion();
   else if (state.status==='finished') renderFinished();
 }
-async function poll() {
-  if (!identity || polling) return;
-  polling = true;
+function poll() {
+  if (!identity) return;
+  if (!polling) polling = refreshState(identity).finally(() => {polling=null;});
+  return polling;
+}
+async function refreshState(player) {
   try {
     const next = await api('state',credentials());
+    if (identity!==player) return;
     clockOffset = Date.parse(next.serverNow)-Date.now();
     const key = `${next.status}/${next.roundIndex}`;
     const wasDifferent = key !== lastRoundKey;
@@ -193,6 +201,7 @@ async function poll() {
     render();
     if (wasDifferent && next.status==='finished') toast('Kilpailu päättyi!');
   } catch (err) {
+    if (identity!==player) return;
     // Verkon väliaikainen katkeaminen ei vie pelaajaa pois huoneesta.
     if (err.message.includes('tunniste ei kelpaa') || err.message.includes('Pelaajaa ei löytynyt')) {
       toast('Peli-istunto ei ole enää voimassa. Liity huoneeseen uudelleen.');
@@ -201,7 +210,7 @@ async function poll() {
       console.warn(err.message);
       if (!state) toast(err.message);
     }
-  } finally { polling=false; }
+  }
 }
 app.addEventListener('submit', async event => {
   if (!['create-form','join-form'].includes(event.target.id)) return;
@@ -225,7 +234,10 @@ app.addEventListener('submit', async event => {
   } catch(err) {
     toast(err.message);
     if(button){button.disabled=false;button.textContent=isCreate?'Luo peli →':'Liity peliin →';}
-  } finally {busy=false;}
+  } finally {
+    busy=false;
+    if (identity && state) render();
+  }
 });
 app.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
@@ -238,17 +250,23 @@ app.addEventListener('click', async event => {
     catch {prompt('Kopioi tästä:',value);}
     return;
   }
-  if (busy) return;
-  if (action==='start' || action==='answer') {
-    busy=true;
-    if(action==='answer') button.classList.add('selected');
-    document.querySelectorAll('[data-action="answer"]').forEach(b=>b.disabled=true);
-    if(action==='start') button.disabled=true;
-    try {
-      await api(action, {...credentials(),...(action==='answer'?{choice:Number(button.dataset.choice)}:{})});
-      await poll();
-    } catch(err) {toast(err.message);await poll();}
-    finally {busy=false;}
+  if (busy || button.disabled || (action!=='ready' && action!=='answer')) return;
+  const player = identity;
+  const payload = action==='ready'
+    ? {ready:button.dataset.ready==='true'}
+    : {choice:Number(button.dataset.choice), roundIndex:state.roundIndex};
+  busy=true;
+  render();
+  try {
+    await api(action, {...credentials(),...payload});
+  } catch(err) {
+    if (identity===player) toast(err.message);
+  } finally {
+    // Mutation jälkeen tarvitaan uusi tilahaku, vaikka edellinen olisi vielä kesken.
+    await polling;
+    if (identity===player) await poll();
+    busy=false;
+    render();
   }
 });
 function init() {
