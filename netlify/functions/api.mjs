@@ -309,8 +309,21 @@ const validateAuth = data => {
 };
 
 export default async (request) => {
-  if (request.method !== 'POST') return json({ error: 'Käytä POST-pyyntöä.' }, 405);
   const action = new URL(request.url).pathname.split('/').filter(Boolean).at(-1);
+  if (action === 'stats') {
+    if (request.method !== 'GET') return json({ error: 'Käytä GET-pyyntöä.' }, 405);
+    try {
+      const { gamesStarted, bankQuestions } = await rpc('quiz_get_stats', {});
+      if (![gamesStarted, bankQuestions].every(count => Number.isSafeInteger(count) && count >= 0)) {
+        throw new Error('Tilastot eivät sisältäneet kahta lukumäärää.');
+      }
+      return json({ gamesStarted, bankQuestions });
+    } catch (error) {
+      console.error('Quiz stats:', error.message);
+      return json({ error: 'Tilastoja ei saatu ladattua.' }, 503);
+    }
+  }
+  if (request.method !== 'POST') return json({ error: 'Käytä POST-pyyntöä.' }, 405);
   if (!['create', 'join', 'state', 'start', 'ready', 'topic', 'answer', 'rematch'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
   try {
     const data = await request.json();
