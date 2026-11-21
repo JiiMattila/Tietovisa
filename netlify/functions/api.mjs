@@ -222,7 +222,7 @@ const validateAuth = data => {
 export default async (request) => {
   if (request.method !== 'POST') return json({ error: 'Käytä POST-pyyntöä.' }, 405);
   const action = new URL(request.url).pathname.split('/').filter(Boolean).at(-1);
-  if (!['create', 'join', 'state', 'start', 'answer'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
+  if (!['create', 'join', 'state', 'start', 'ready', 'answer'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
   try {
     const data = await request.json();
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Virheellinen pyyntö.');
@@ -266,10 +266,20 @@ export default async (request) => {
     const auth = validateAuth(data);
     if (action === 'state') return json(await rpc('quiz_get_state', auth));
     if (action === 'start') return json(await rpc('quiz_start_room', auth));
+    if (action === 'ready') {
+      if (typeof data.ready !== 'boolean') throw new Error('Virheellinen valmiustieto.');
+      return json(await rpc('quiz_set_ready', { ...auth, p_ready: data.ready }));
+    }
     if (action === 'answer') {
-      const choice = Number(data.choice);
+      const choice = Number(data.choice ?? NaN);
       if (!Number.isInteger(choice) || choice < 0 || choice > 4) throw new Error('Valitse yksi viidestä vastauksesta.');
-      return json(await rpc('quiz_submit_answer', { ...auth, p_choice: choice }));
+      const round = data.roundIndex;
+      if (round !== undefined && (!Number.isInteger(round) || round < 0 || round >= 30)) {
+        throw new Error('Virheellinen kysymysnumero.');
+      }
+      const args = { ...auth, p_choice: choice };
+      if (round !== undefined) args.p_round_index = round;
+      return json(await rpc('quiz_submit_answer', args));
     }
   } catch (err) {
     console.error('Quiz API:', err?.message);

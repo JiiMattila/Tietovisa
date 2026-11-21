@@ -30,6 +30,8 @@ create table if not exists public.quiz_players (
   unique (room_id, name)
 );
 
+alter table public.quiz_players add column if not exists ready boolean not null default false;
+
 create table if not exists public.quiz_answers (
   room_id uuid not null references public.quiz_rooms(id) on delete cascade,
   player_id uuid not null references public.quiz_players(id) on delete cascade,
@@ -101,10 +103,11 @@ $$;
 -- Pistettä lisätään vasta paljastusvaiheessa, jotta oikea vastaus ei paljastu pisteistä.
 create or replace function public.quiz_advance_room(p_room_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
-declare r public.quiz_rooms%rowtype; v_now timestamptz := clock_timestamp();
+declare r public.quiz_rooms%rowtype; v_now timestamptz;
 begin
   select * into r from public.quiz_rooms where id=p_room_id for update;
   if not found then return; end if;
+  v_now := clock_timestamp();
   if r.status = 'question' and (
        v_now >= r.question_started_at + pg_catalog.make_interval(secs => r.timer_seconds)
        or (select count(*) from public.quiz_answers where room_id=r.id and round_index=r.round_index)
@@ -127,49 +130,68 @@ begin
 end;
 $$;
 
-create or replace function public.quiz_start_room(
-  p_code text, p_player_id uuid, p_secret_hash text
-) returns jsonb language plpgsql security definer set search_path = '' as $$
+create or replace function public.quiz_set_ready(
+  p_code text, p_player_id uuid, p_secret_hash text, p_ready boolean
+) returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare r public.quiz_rooms%rowtype;
 begin
   select * into r from public.quiz_rooms where code=upper(trim(p_code)) for update;
-  if not found or r.host_id is distinct from p_player_id or not exists
+  if not found or not exists
     (select 1 from public.quiz_players where id=p_player_id and room_id=r.id and secret_hash=p_secret_hash)
-  then raise exception 'Vain pelin luoja voi aloittaa pelin'; end if;
+  then raise exception 'Pelaajaa ei löytynyt'; end if;
   if r.status <> 'lobby' then raise exception 'Peli on jo käynnissä'; end if;
-  update public.quiz_rooms set status='question',round_index=0,
-    question_started_at=clock_timestamp() where id=r.id;
+  if p_ready is null then raise exception 'Virheellinen valmiustieto'; end if;
+
+  update public.quiz_players set ready=p_ready where room_id=r.id and id=p_player_id;
+  if not exists (select 1 from public.quiz_players where room_id=r.id and not ready) then
+    update public.quiz_rooms set status='question',round_index=0,
+      question_started_at=clock_timestamp() where id=r.id;
+  end if;
   return jsonb_build_object('ok',true);
 end;
 $$;
 
+-- Vanhan käyttöliittymän aloituspyyntö merkitsee pyytäjän valmiiksi.
+create or replace function public.quiz_start_room(
+  p_code text, p_player_id uuid, p_secret_hash text
+) returns jsonb language sql security invoker set search_path = '' as $$
+  select public.quiz_set_ready(p_code,p_player_id,p_secret_hash,true);
+$$;
+
 create or replace function public.quiz_submit_answer(
-  p_code text, p_player_id uuid, p_secret_hash text, p_choice integer
-) returns jsonb language plpgsql security definer set search_path = '' as $$
+  p_code text, p_player_id uuid, p_secret_hash text, p_choice integer, p_round_index integer
+) returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare r public.quiz_rooms%rowtype; v_now timestamptz; v_elapsed numeric; v_points integer;
 begin
   select * into r from public.quiz_rooms where code=upper(trim(p_code)) for update;
   if not found or not exists
      (select 1 from public.quiz_players where room_id=r.id and id=p_player_id and secret_hash=p_secret_hash)
     then raise exception 'Pelaajaa ei löytynyt'; end if;
-  perform public.quiz_advance_room(r.id);
-  select * into r from public.quiz_rooms where id=r.id;
-  if r.status <> 'question' then raise exception 'Vastausaika on päättynyt'; end if;
-  if p_choice not between 0 and 4 then raise exception 'Virheellinen vastaus'; end if;
-  if exists (select 1 from public.quiz_answers where room_id=r.id and player_id=p_player_id and round_index=r.round_index) then
-    return jsonb_build_object('accepted',true);
+  if r.status <> 'question' or (p_round_index is not null and r.round_index <> p_round_index) then
+    raise exception 'Vastausaika on päättynyt';
   end if;
+  if p_choice is null or p_choice not between 0 and 4 then raise exception 'Virheellinen vastaus'; end if;
   v_now := clock_timestamp();
   v_elapsed := extract(epoch from (v_now - r.question_started_at));
   if v_elapsed >= r.timer_seconds then raise exception 'Vastausaika on päättynyt'; end if;
   if (r.questions -> r.round_index ->> 'answerIndex')::integer = p_choice then
      v_points := 600 + floor(400 * greatest(0,1-v_elapsed/r.timer_seconds))::integer;
   else v_points := 0; end if;
-  insert into public.quiz_answers(room_id,player_id,round_index,choice,points,answered_at)
-    values(r.id,p_player_id,r.round_index,p_choice,v_points,v_now);
+  insert into public.quiz_answers as a (room_id,player_id,round_index,choice,points,answered_at)
+    values(r.id,p_player_id,r.round_index,p_choice,v_points,v_now)
+    on conflict (room_id,player_id,round_index) do update
+      set choice=excluded.choice, points=excluded.points, answered_at=excluded.answered_at
+      where a.choice <> excluded.choice;
   perform public.quiz_advance_room(r.id);
   return jsonb_build_object('accepted',true);
 end;
+$$;
+
+-- Palvelee myös asiakkaita, jotka eivät vielä lähetä kierrosnumeroa.
+create or replace function public.quiz_submit_answer(
+  p_code text, p_player_id uuid, p_secret_hash text, p_choice integer
+) returns jsonb language sql security invoker set search_path = '' as $$
+  select public.quiz_submit_answer(p_code,p_player_id,p_secret_hash,p_choice,null::integer);
 $$;
 
 -- Oikea vastaus ja pelaajien valinnat jaetaan vasta paljastusvaiheessa.
@@ -204,8 +226,11 @@ begin
       'id',p.id,'name',p.name,'score',p.score,
       'isHost',p.id=r.host_id,
       'answered',a.player_id is not null
-    ) || case when r.status='reveal' then jsonb_build_object('choice',a.choice)
-              else '{}'::jsonb end
+    ) || case r.status
+      when 'lobby' then jsonb_build_object('ready',p.ready)
+      when 'reveal' then jsonb_build_object('choice',a.choice)
+      else '{}'::jsonb
+    end
       order by p.score desc, p.joined_at),'[]'::jsonb)
       from public.quiz_players p
       left join public.quiz_answers a on a.room_id=p.room_id and a.player_id=p.id
@@ -218,14 +243,18 @@ $$;
 -- Vain service_role saa kutsua funktioita. Avainta käytetään ainoastaan Netlifyn palvelimella.
 revoke all on function public.quiz_create_room(text,text,text,integer,integer,text,text,text,jsonb) from public, anon, authenticated;
 revoke all on function public.quiz_join_room(text,text,text) from public, anon, authenticated;
+revoke all on function public.quiz_set_ready(text,uuid,text,boolean) from public, anon, authenticated;
 revoke all on function public.quiz_start_room(text,uuid,text) from public, anon, authenticated;
 revoke all on function public.quiz_submit_answer(text,uuid,text,integer) from public, anon, authenticated;
+revoke all on function public.quiz_submit_answer(text,uuid,text,integer,integer) from public, anon, authenticated;
 revoke all on function public.quiz_get_state(text,uuid,text) from public, anon, authenticated;
 revoke all on function public.quiz_advance_room(uuid) from public, anon, authenticated;
 grant execute on function public.quiz_create_room(text,text,text,integer,integer,text,text,text,jsonb) to service_role;
 grant execute on function public.quiz_join_room(text,text,text) to service_role;
+grant execute on function public.quiz_set_ready(text,uuid,text,boolean) to service_role;
 grant execute on function public.quiz_start_room(text,uuid,text) to service_role;
 grant execute on function public.quiz_submit_answer(text,uuid,text,integer) to service_role;
+grant execute on function public.quiz_submit_answer(text,uuid,text,integer,integer) to service_role;
 grant execute on function public.quiz_get_state(text,uuid,text) to service_role;
 grant execute on function public.quiz_advance_room(uuid) to service_role;
 
