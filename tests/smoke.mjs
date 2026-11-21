@@ -21,6 +21,7 @@ globalThis.fetch = async (url,options) => {
   const body = JSON.parse(options.body);
   sent.push({url,body,headers:options.headers});
   assert.ok(!options.headers.Authorization, 'New secret keys must not be sent as JWT');
+  if (url.endsWith('/quiz_get_stats')) return Response.json({gamesStarted: 3, bankQuestions: 0, ignored: true});
   if (url.endsWith('/quiz_recent_questions')) return Response.json([]);
   if (url.endsWith('/quiz_bank_pick')) return Response.json([]);
   if (url.endsWith('/quiz_bank_pick_varied')) return Response.json(q.slice(0,body.p_limit));
@@ -50,6 +51,13 @@ const post = async (action,data) => {
   }));
   return {status:response.status,data:await response.json()};
 };
+const stats = await handler(new Request('https://play.netlify.app/api/stats'));
+assert.equal(stats.status, 200);
+assert.equal(stats.headers.get('cache-control'), 'no-store');
+assert.deepEqual(await stats.json(), {gamesStarted: 3, bankQuestions: 0});
+assert.ok(sent.at(-1).url.endsWith('/quiz_get_stats'));
+assert.deepEqual(sent.at(-1).body, {});
+assert.equal((await post('stats',{})).status, 405);
 const created = await post('create',{name:'Pelaaja yksi',topic:'Historia',total:20,timer:15,difficulty:'keskitaso'});
 assert.equal(created.status,200);
 assert.equal(created.data.secret.length,64);

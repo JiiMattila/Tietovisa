@@ -39,7 +39,7 @@ function reset() {
 async function api(action, data) {
   let response;
   try {
-    response = await fetch('/api/' + action, {
+    response = await fetch('/api/' + action, data === undefined ? undefined : {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
     });
   } catch { throw new Error('Verkkoyhteys katkesi. Tarkista yhteys ja yritä uudelleen.'); }
@@ -53,6 +53,18 @@ function credentials() {
 function formField(label, name, placeholder, value='', extra='') {
   return `<div class="field"><label for="${name}">${label}</label><input id="${name}" name="${name}" placeholder="${placeholder}" maxlength="80" value="${escapeHtml(value)}" ${extra} required></div>`;
 }
+async function loadHomeStats(container) {
+  try {
+    const { gamesStarted, bankQuestions } = await api('stats');
+    if (!container.isConnected) return;
+    container.querySelector('[data-stat="games"]').textContent = gamesStarted.toLocaleString('fi-FI');
+    container.querySelector('[data-stat="questions"]').textContent = bankQuestions.toLocaleString('fi-FI');
+  } catch {
+    if (container.isConnected) container.textContent = 'Tilastoja ei saatu ladattua.';
+  } finally {
+    container.removeAttribute('aria-busy');
+  }
+}
 function renderHome() {
   renderedView = '';
   const prefill = new URLSearchParams(location.search).get('room') || '';
@@ -63,6 +75,10 @@ function renderHome() {
       <h1 class="display">Tietoa. Nopeutta.<br><em>Yksi voittaja.</em></h1>
       <p class="lead">Kerää kaverit kasaan, luo pelikoodi ja ottakaa mittaa toisistanne. Sama kysymys kaikille, viisi vaihtoehtoa ja yksi oikea vastaus. Pelaa suoraan selaimessa.</p>
       <div class="metrics"><span class="metric"><span class="metric-icon">♟</span> 1–10 pelaajaa</span><span class="metric"><span class="metric-icon">◷</span> Reaaliaikaiset kierrokset</span><span class="metric"><span class="metric-icon">✦</span> 12 aihealuetta</span></div>
+      <div class="metrics muted" data-home-stats aria-busy="true">
+        <span class="metric">Aloitettuja pelejä <strong class="highlight" data-stat="games">–</strong></span>
+        <span class="metric">Kysymyksiä pankissa <strong class="highlight" data-stat="questions">–</strong></span>
+      </div>
     </div></section>
     <section class="panels">
       <form id="create-form" class="panel">
@@ -89,6 +105,7 @@ function renderHome() {
         <p class="subnote">Et tarvitse tunnusta tai sovellusta. Pelaamiseen riittää puhelin, tabletti tai tietokone.</p>
       </form>
     </section>`;
+  void loadHomeStats(app.querySelector('[data-home-stats]'));
 }
 function roomTitle(title, sub, pill) {
   return `<div class="room-heading"><div><span class="eyebrow">NÖRTTIEN ARVAUSKESKUS / ${escapeHtml(state?.code || '')}</span><h1>${title}</h1><div class="room-subtitle">${sub}</div></div>${pill?`<span class="chip chip-green">${pill}</span>`:''}</div>`;

@@ -716,4 +716,16 @@ grant execute on function public.quiz_bank_pick_varied(text[],text,integer,text[
 grant execute on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[],boolean) to service_role;
 grant execute on function public.quiz_pick_player_topics(uuid,text,integer) to service_role;
 grant execute on function public.quiz_pick_player_topics(uuid,text,integer,jsonb) to service_role;
+
+-- Pelihuone tulee mukaan heti ensimmäisen kierroksen alkaessa, myös uusintapelissä.
+create or replace function public.quiz_get_stats()
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'gamesStarted', (select count(*) from public.quiz_rooms where round_index >= 0),
+    'bankQuestions', (select count(*) from public.quiz_question_bank)
+  );
+$$;
+
+revoke all on function public.quiz_get_stats() from public, anon, authenticated;
+grant execute on function public.quiz_get_stats() to service_role;
 notify pgrst, 'reload schema';
