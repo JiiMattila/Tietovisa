@@ -187,15 +187,19 @@ async function getRecentQuestions() {
 async function generateBatches(total, topic, difficulty, recent, categories) {
   if (!process.env.GEMINI_API_KEY) return { primary: [], reserve: [] };
   const recentTexts = recent.slice(0, 45).map(question => question.text);
-  const [primary, reserve] = await Promise.all([
-    generateQuestions(total, topic, difficulty, recentTexts, shuffle(categories)).catch(error => {
-      console.warn('Gemini-pelikysymysten luonti epäonnistui:', error.message);
+  const generate = async (count, batchTopic, batchCategories, label) => {
+    try { return await generateQuestions(count, batchTopic, difficulty, recentTexts, batchCategories); }
+    catch (error) {
+      console.warn(`Gemini-${label} luonti epäonnistui:`, error.message);
       return [];
-    }),
-    generateQuestions(BANK_EXTRA, 'Varakysymykset', difficulty, recentTexts, shuffle(VARIED_TOPICS)).catch(error => {
-      console.warn('Gemini-varakysymysten luonti epäonnistui:', error.message);
-      return [];
-    })
+    }
+  };
+  const reserveCategories = shuffle(VARIED_TOPICS);
+  const halfway = Math.ceil(reserveCategories.length / 2);
+  const [primary, ...reserveBatches] = await Promise.all([
+    generate(total, topic, shuffle(categories), 'pelikysymysten'),
+    generate(BANK_EXTRA / 2, 'Varakysymykset', reserveCategories.slice(0, halfway), 'varakysymysten'),
+    generate(BANK_EXTRA / 2, 'Varakysymykset', reserveCategories.slice(halfway), 'varakysymysten')
   ]);
   const seen = recent.map(questionSignature);
   const fresh = question => {
@@ -204,7 +208,7 @@ async function generateBatches(total, topic, difficulty, recent, categories) {
     seen.push(signature);
     return true;
   };
-  return { primary: primary.filter(fresh), reserve: reserve.filter(fresh) };
+  return { primary: primary.filter(fresh), reserve: reserveBatches.flat().filter(fresh) };
 }
 async function saveGeneratedQuestions(questions, difficulty) {
   const byCategory = new Map();

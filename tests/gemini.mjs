@@ -27,10 +27,12 @@ globalThis.fetch = async (url, opts) => {
     const questionSchema = body.generationConfig.responseSchema.properties.questions;
     assert.equal(questionSchema.maxItems, undefined);
     assert.deepEqual(questionSchema.items.properties.category, { type: 'string' });
-    if ((phase === 'reserve-failure' && count === 20) || (phase === 'primary-failure' && count === 5)) {
+    const secondReserve = calls.filter(call => call.name === 'Gemini' && call.count === 10).length === 2;
+    if ((phase === 'reserve-failure' && count === 10 && secondReserve) || (phase === 'primary-failure' && count === 5)) {
       return Response.json({ error: { message: 'quota' } }, { status: 429 });
     }
-    return geminiResponse(count === 5 ? pool.slice(0, 5) : pool.slice(5, 25),
+    const start = count === 5 ? 0 : secondReserve ? 15 : 5;
+    return geminiResponse(pool.slice(start, start + count),
       categories.map(category => category.toLocaleLowerCase('fi')));
   }
   calls.push({ name, body });
@@ -104,7 +106,7 @@ assertDistinctQuestions(25);
 reset('reserve-failure');
 assert.deepEqual(await post('ready', { ...credentials, ready: true }), { ok: true });
 assert.equal(completion.questions.length, 5);
-assertDistinctQuestions(5);
+assertDistinctQuestions(15);
 
 reset('primary-failure');
 assert.deepEqual(await post('ready', { ...credentials, ready: true }), { ok: true });

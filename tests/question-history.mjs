@@ -72,6 +72,7 @@ const original = {
 const rephrased = {...original,text:'Mikä on kaupungin keskustan kaikkein vanhimman puiston nimi?'};
 const unique = demos.slice(0, 24);
 const saved = [];
+let reserveBatches = 0;
 process.env.GEMINI_API_KEY = 'gemini-test-fixture';
 globalThis.fetch = async (url, options) => {
   const params = JSON.parse(options.body);
@@ -79,9 +80,8 @@ globalThis.fetch = async (url, options) => {
   if (url.includes('generativelanguage.googleapis.com')) {
     const { count, categories, prompt } = geminiBatch(params);
     assert.ok(prompt.includes(original.text));
-    return count === 5
-      ? geminiResponse([original, rephrased, ...unique.slice(0, 3)], categories)
-      : geminiResponse([unique[0], ...unique.slice(3, 22)], categories);
+    if (count === 5) return geminiResponse([original, rephrased, ...unique.slice(0, 3)], categories);
+    return geminiResponse(reserveBatches++ === 0 ? [unique[0], ...unique.slice(3, 12)] : unique.slice(12, 22), categories);
   }
   if (url.endsWith('/quiz_bank_pick')) {
     assert.equal(params.p_limit, 2);
