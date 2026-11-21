@@ -24,12 +24,14 @@ globalThis.fetch = async (url, opts) => {
     calls.push({ name: 'Gemini', count, categories });
     assert.equal(opts.headers['x-goog-api-key'], 'test-not-real');
     assert.equal(body.generationConfig.responseMimeType, 'application/json');
-    assert.deepEqual(new Set(categories),
-      new Set(body.generationConfig.responseSchema.properties.questions.items.properties.category.enum));
+    const questionSchema = body.generationConfig.responseSchema.properties.questions;
+    assert.equal(questionSchema.maxItems, undefined);
+    assert.deepEqual(questionSchema.items.properties.category, { type: 'string' });
     if ((phase === 'reserve-failure' && count === 20) || (phase === 'primary-failure' && count === 5)) {
       return Response.json({ error: { message: 'quota' } }, { status: 429 });
     }
-    return geminiResponse(count === 5 ? pool.slice(0, 5) : pool.slice(5, 25), categories);
+    return geminiResponse(count === 5 ? pool.slice(0, 5) : pool.slice(5, 25),
+      categories.map(category => category.toLocaleLowerCase('fi')));
   }
   calls.push({ name, body });
   if (name === 'quiz_recent_questions') return Response.json([]);

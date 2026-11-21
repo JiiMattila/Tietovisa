@@ -77,19 +77,21 @@ async function generateQuestions(total, topic, difficulty, recentTexts, categori
     categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
   }
   const assigned = [...categoryCounts.keys()];
+  const canonicalCategories = new Map(assigned.map(category => [normalize(category), category]));
+  // Suurten erien rajoitukset tarkistetaan palvelimella, jotta Geminin JSON-skeema pysyy yksinkertaisena.
   const schema = {
     type: 'object',
     properties: {
       questions: {
-        type: 'array', minItems: total, maxItems: total,
+        type: 'array',
         items: {
           type: 'object',
           properties: {
             text: { type: 'string' },
-            options: { type: 'array', minItems: 5, maxItems: 5, items: { type: 'string' } },
-            answerIndex: { type: 'integer', minimum: 0, maximum: 4 },
+            options: { type: 'array', items: { type: 'string' } },
+            answerIndex: { type: 'integer' },
             explanation: { type: 'string' },
-            ...(assigned.length ? { category: { type: 'string', enum: assigned } } : {})
+            ...(assigned.length ? { category: { type: 'string' } } : {})
           },
           required: ['text', 'options', 'answerIndex', 'explanation', ...(assigned.length ? ['category'] : [])]
         }
@@ -133,12 +135,15 @@ async function generateQuestions(total, topic, difficulty, recentTexts, categori
   if (!Array.isArray(parsed?.questions)) throw new Error('Gemini ei palauttanut kysymyslistaa.');
   const questions = parsed.questions.slice(0, total).map(validateQuestion).filter(Boolean);
   if (!assigned.length) return questions.map(question => ({ ...question, category: topic }));
-  return questions.filter(question => {
-    const remaining = categoryCounts.get(question.category) ?? 0;
-    if (!remaining) return false;
-    categoryCounts.set(question.category, remaining - 1);
-    return true;
-  });
+  const categorized = [];
+  for (const question of questions) {
+    const category = canonicalCategories.get(normalize(question.category));
+    const remaining = categoryCounts.get(category) ?? 0;
+    if (!remaining) continue;
+    categoryCounts.set(category, remaining - 1);
+    categorized.push({ ...question, category });
+  }
+  return categorized;
 }
 
 // Pankkiin tallennetaan kanoniset kysymykset. Oikeat vastaukset eivät koskaan siirry selaimeen ennen paljastusta.
