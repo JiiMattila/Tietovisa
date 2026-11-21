@@ -64,7 +64,7 @@ function renderHome() {
         <h2>Luo uusi peli</h2>
         <p class="panel-desc">Valitse asetukset. Sinäkin pelaat mukana, mutta saat aloittaa kilpailun.</p>
         ${formField('Oma nimimerkki','create-name','Esim. Tietäjä99','','autocomplete="nickname"')}
-        <div class="field"><label for="topic">Aihealue</label><input id="topic" name="topic" placeholder="Esim. yleistieto, historia, musiikki..." value="Yleistieto" maxlength="80" required><small>Vapaa aihealue toimii, kun OpenAI-avain on määritetty.</small></div>
+        <div class="field"><label for="topic">Aihealue</label><input id="topic" name="topic" placeholder="Esim. yleistieto, historia, musiikki..." value="Yleistieto" maxlength="80" required><small>Vapaa aihealue toimii, kun Gemini-avain on määritetty.</small></div>
         <div class="twocol">
           <div class="field"><label for="total">Kysymyksiä</label><select id="total" name="total"><option value="5">5 kysymystä</option><option value="10" selected>10 kysymystä</option><option value="15">15 kysymystä</option><option value="20">20 kysymystä</option><option value="30">30 kysymystä</option></select></div>
           <div class="field"><label for="timer">Aika / kysymys</label><select id="timer" name="timer"><option value="10">10 sekuntia</option><option value="15" selected>15 sekuntia</option><option value="20">20 sekuntia</option><option value="30">30 sekuntia</option><option value="45">45 sekuntia</option><option value="60">60 sekuntia</option></select></div>
@@ -112,7 +112,7 @@ function renderLobby() {
       <div class="big-code-block"><div class="room-code">${escapeHtml(state.code)}</div><span class="muted">Kerro tämä koodi muille pelaajille</span></div>
       <div class="button-row"><button class="btn btn-secondary btn-small" data-action="copy-code">⧉ Kopioi koodi</button><button class="btn btn-secondary btn-small" data-action="copy-link">↗ Kopioi kutsulinkki</button></div>
       <div class="room-instructions"><strong>${state.total} kysymystä</strong> · ${state.timer} s / kysymys · ${escapeHtml(state.difficulty)}<br>Aihe: <strong>${escapeHtml(state.topic)}</strong><br><br>Kaikki vastaavat samaan kysymykseen omilta laitteiltaan. Nopeus vaikuttaa pisteisiin.</div>
-      ${state.source==='demo'?'<div class="demo-alert">⚠ Demotila: käytössä ovat valmiit yleistietokysymykset. Oman aihealueen AI-kysymykset aktivoituvat, kun OpenAI API -avain lisätään Netlifyyn.</div>':''}
+      ${state.source==='demo'?'<div class="demo-alert">⚠ Demotila: käytössä ovat valmiit yleistietokysymykset. Oman aihealueen AI-kysymykset aktivoituvat, kun Gemini API -avain lisätään Netlifyyn.</div>':''}
       ${isHost?`<button class="btn btn-primary btn-full" data-action="start" ${busy?'disabled':''}>${busy?'Käynnistetään...':'Aloita kilpailu →'}</button>`:'<div class="chip">◷ Pelin luoja käynnistää kilpailun</div>'}
       <button class="btn btn-secondary btn-full" style="margin-top:10px" data-action="leave">Takaisin etusivulle</button>
     </div>${renderPlayers('lobby')}</section>`;
