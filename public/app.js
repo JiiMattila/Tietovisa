@@ -56,22 +56,21 @@ function renderHome() {
       <div class="eyebrow">✦ HAASTA KAVERISI</div>
       <h1 class="display">Tietoa. Nopeutta.<br><em>Yksi voittaja.</em></h1>
       <p class="lead">Kerää kaverit kasaan, luo pelikoodi ja ottakaa mittaa toisistanne. Sama kysymys kaikille, viisi vaihtoehtoa ja yksi oikea vastaus. Pelaa suoraan selaimessa.</p>
-      <div class="metrics"><span class="metric"><span class="metric-icon">♟</span> 1–10 pelaajaa</span><span class="metric"><span class="metric-icon">◷</span> Reaaliaikaiset kierrokset</span><span class="metric"><span class="metric-icon">✦</span> AI-kysymykset</span></div>
+      <div class="metrics"><span class="metric"><span class="metric-icon">♟</span> 1–10 pelaajaa</span><span class="metric"><span class="metric-icon">◷</span> Reaaliaikaiset kierrokset</span><span class="metric"><span class="metric-icon">✦</span> 10 aihealuetta</span></div>
     </div></section>
     <section class="panels">
       <form id="create-form" class="panel">
         <span class="panel-icon">✦</span>
         <h2>Luo uusi peli</h2>
-        <p class="panel-desc">Valitse asetukset. Sinäkin pelaat mukana, mutta saat aloittaa kilpailun.</p>
+        <p class="panel-desc">Valitse asetukset ja jaa pelikoodi muille pelaajille.</p>
         ${formField('Oma nimimerkki','create-name','Esim. Tietäjä99','','autocomplete="nickname"')}
-        <div class="field"><label for="topic">Aihealue</label><input id="topic" name="topic" list="topics" placeholder="Esim. yleistieto, historia, musiikki..." value="Yleistieto" maxlength="80" required><datalist id="topics"><option value="Vapaa"></option><option value="Yleistieto"></option></datalist><small>Valitse Vapaa, jos haluat kysymyksiä useasta eri kategoriasta.</small></div>
+        <div class="field"><label for="topic-mode">Aihealueet</label><select id="topic-mode" name="topic-mode"><option value="all">Kaikki aihealueet</option><option value="players">Pelaajien valitsemat</option></select><small>Pelaajien valitsemassa pelissä jokainen varaa yhden aiheen odotushuoneessa.</small></div>
         <div class="twocol">
           <div class="field"><label for="total">Kysymyksiä</label><select id="total" name="total"><option value="5">5 kysymystä</option><option value="10" selected>10 kysymystä</option><option value="15">15 kysymystä</option><option value="20">20 kysymystä</option><option value="30">30 kysymystä</option></select></div>
           <div class="field"><label for="timer">Aika / kysymys</label><select id="timer" name="timer"><option value="10">10 sekuntia</option><option value="15" selected>15 sekuntia</option><option value="20">20 sekuntia</option><option value="30">30 sekuntia</option><option value="45">45 sekuntia</option><option value="60">60 sekuntia</option></select></div>
         </div>
         <div class="field"><label for="difficulty">Vaikeustaso</label><select id="difficulty" name="difficulty"><option value="helppo">Helppo</option><option value="keskitaso" selected>Keskitaso</option><option value="vaikea">Vaikea</option></select></div>
-        <button class="btn btn-primary btn-full" type="submit" ${busy?'disabled':''}>${busy?'Luodaan kysymyksiä...':'Luo peli →'}</button>
-        <p class="subnote">Pelin luonti voi kestää hetken, jos tekoäly generoi kysymykset.</p>
+        <button class="btn btn-primary btn-full" type="submit" ${busy?'disabled':''}>${busy?'Luodaan peliä...':'Luo peli →'}</button>
       </form>
       <form id="join-form" class="panel">
         <span class="panel-icon blue">⌗</span>
@@ -103,7 +102,7 @@ function renderPlayers(kind='lobby') {
     <div class="player-list">${sorted.map((p, idx) => `<div class="player">
       ${kind==='lobby'?'':`<div class="rank-num">${idx+1}.</div>`}
       <div class="avatar ${idx%2?'alt':''}">${escapeHtml(p.name.charAt(0).toUpperCase())}</div>
-      <div class="player-grow"><div class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</div>${p.isHost?'<span class="player-flag">PELİN LUOJA</span>':''}${state.status==='reveal'?renderPlayerAnswer(p.choice,state.question):''}</div>
+      <div class="player-grow"><div class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</div>${p.isHost?'<span class="player-flag">PELİN LUOJA</span>':''}${kind==='lobby' && p.chosenTopic?`<div class="status-mark">${escapeHtml(p.chosenTopic)}</div>`:''}${state.status==='reveal'?renderPlayerAnswer(p.choice,state.question):''}</div>
       ${kind==='lobby'?'':`<span class="score">${p.score.toLocaleString('fi-FI')} p</span>`}
       ${kind==='lobby'?`<span class="status-mark ${p.ready?'done':''}">${p.ready?'✓ Valmis':'◷ Odottaa'}</span>`:''}
       ${kind==='question'?`<span class="status-mark ${p.answered?'done':''}">${p.answered?'✓':'◷'}</span>`:''}
@@ -111,17 +110,35 @@ function renderPlayers(kind='lobby') {
     ${kind==='lobby'&&players.length===1?'<p class="subnote">Odotat muita pelaajia. Voit myös kokeilla peliä yksin.</p>':''}
   </div>`;
 }
+function renderTopicPicker(chosenTopic) {
+  const reserved = new Set(state.players.filter(p => p.id!==state.meId).map(p => p.chosenTopic));
+  const options = (state.topics || []).map(topic => {
+    const taken = reserved.has(topic);
+    return `<option value="${escapeHtml(topic)}" ${taken?'disabled':''} ${topic===chosenTopic?'selected':''}>${escapeHtml(topic)}${taken?' (varattu)':''}</option>`;
+  }).join('');
+  const hint = state.players.length>state.total
+    ? '<small>Kysymyksiä on vähemmän kuin pelaajia, joten peli arpoo mukaan mahtuvat aiheet.</small>'
+    : '';
+  return `<div class="field"><label for="player-topic">Oma aihealue</label>
+    <select id="player-topic" ${busy?'disabled':''}><option value="">${chosenTopic?'Vapauta valinta':'Valitse aihealue'}</option>${options}</select>
+    <small>Valitse aihealue ennen kuin merkitset itsesi valmiiksi. Aiheen vaihtaminen peruu valmiuden.</small>${hint}
+    </div>`;
+}
 function renderLobby() {
   document.title = `Odota pelaajia • ${state.code} — Nörttien Arvauskeskus`;
-  const ready = state.players.find(p => p.id===state.meId)?.ready === true;
+  const me = state.players.find(p => p.id===state.meId);
+  const ready = me?.ready === true;
+  const chooseTopics = state.topicMode==='players';
+  const topic = state.topic==='Vapaa' ? 'Kaikki aihealueet' : state.topic;
   app.innerHTML = `${roomTitle('Odotushuone','Jaa koodi kavereille. Peli alkaa, kun kaikki huoneessa ovat valmiina.','● HUONE AUKI')}
     <section class="layout"><div class="panel">
       <div class="room-label">LIITTYMISKOODI</div>
       <div class="big-code-block"><div class="room-code">${escapeHtml(state.code)}</div><span class="muted">Kerro tämä koodi muille pelaajille</span></div>
       <div class="button-row"><button class="btn btn-secondary btn-small" data-action="copy-code">⧉ Kopioi koodi</button><button class="btn btn-secondary btn-small" data-action="copy-link">↗ Kopioi kutsulinkki</button></div>
-      <div class="room-instructions"><strong>${state.total} kysymystä</strong> · ${state.timer} s / kysymys · ${escapeHtml(state.difficulty)}<br>Aihe: <strong>${escapeHtml(state.topic)}</strong><br><br>Kaikki vastaavat samaan kysymykseen omilta laitteiltaan. Nopeus vaikuttaa pisteisiin.</div>
+      <div class="room-instructions"><strong>${state.total} kysymystä</strong> · ${state.timer} s / kysymys · ${escapeHtml(state.difficulty)}<br>Aihe: <strong>${escapeHtml(topic)}</strong><br><br>Kaikki vastaavat samaan kysymykseen omilta laitteiltaan. Nopeus vaikuttaa pisteisiin.</div>
       ${state.source==='demo'?'<div class="demo-alert">⚠ Demotila: käytössä ovat valmiit yleistietokysymykset. Oman aihealueen AI-kysymykset aktivoituvat, kun Gemini API -avain lisätään Netlifyyn.</div>':''}
-      <button class="btn ${ready?'btn-secondary':'btn-primary'} btn-full" data-action="ready" data-ready="${!ready}" ${busy?'disabled':''}>${ready?'Peru valmius':'Valmiina'}</button>
+      ${chooseTopics?renderTopicPicker(me?.chosenTopic):''}
+      <button class="btn ${ready?'btn-secondary':'btn-primary'} btn-full" data-action="ready" data-ready="${!ready}" ${busy||(chooseTopics&&!me?.chosenTopic)?'disabled':''}>${ready?'Peru valmius':'Valmiina'}</button>
       <button class="btn btn-secondary btn-full" style="margin-top:10px" data-action="leave">Takaisin etusivulle</button>
     </div>${renderPlayers('lobby')}</section>`;
 }
@@ -180,7 +197,10 @@ function updateClock() {
 function render() {
   if (!identity) return renderHome();
   if (!state) {app.innerHTML='<div class="loading"><span class="spinner"></span> Yhdistetään pelihuoneeseen...</div>';return;}
-  if (state.status==='lobby') renderLobby();
+  if (state.status==='lobby') {
+    // Tilan päivitys ei saa sulkea pelaajan avointa alasvetovalikkoa.
+    if (busy || document.activeElement?.id!=='player-topic') renderLobby();
+  }
   else if (state.status==='question'||state.status==='reveal') renderQuestion();
   else if (state.status==='finished') renderFinished();
 }
@@ -221,10 +241,10 @@ app.addEventListener('submit', async event => {
   const isCreate = event.target.id === 'create-form';
   const values = Object.fromEntries(form.entries());
   const button = event.target.querySelector('button[type="submit"]');
-  if (button) {button.disabled=true; button.textContent=isCreate?'Luodaan kysymyksiä...':'Liitytään...';}
+  if (button) {button.disabled=true; button.textContent=isCreate?'Luodaan peliä...':'Liitytään...';}
   try {
     const result = await api(isCreate?'create':'join',isCreate ? {
-      name:values['create-name'], topic:values.topic, total:Number(values.total),
+      name:values['create-name'], topicMode:values['topic-mode'], total:Number(values.total),
       timer:Number(values.timer), difficulty:values.difficulty
     } : {name:values['join-name'],code:values['join-code']});
     saveIdentity(result);
@@ -251,10 +271,18 @@ app.addEventListener('click', async event => {
     return;
   }
   if (busy || button.disabled || (action!=='ready' && action!=='answer')) return;
-  const player = identity;
   const payload = action==='ready'
     ? {ready:button.dataset.ready==='true'}
     : {choice:Number(button.dataset.choice), roundIndex:state.roundIndex};
+  await changeRoom(action,payload);
+});
+app.addEventListener('change', async event => {
+  if (event.target.id!=='player-topic' || state?.status!=='lobby') return;
+  await changeRoom('topic',{topic:event.target.value});
+});
+async function changeRoom(action,payload) {
+  if (busy || !identity) return;
+  const player = identity;
   busy=true;
   render();
   try {
@@ -268,7 +296,7 @@ app.addEventListener('click', async event => {
     busy=false;
     render();
   }
-});
+}
 function init() {
   const room = (new URLSearchParams(location.search).get('room')||'').toUpperCase();
   if (/^[A-HJ-NP-Z2-9]{6}$/.test(room)) {

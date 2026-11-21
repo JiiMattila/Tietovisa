@@ -8,11 +8,11 @@ Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla
 - 5/10/15/20/30 kysymystä, **viisi vastausvaihtoehtoa** ja aina yksi oikea.
 - Valittava vastausaika (10–60 sekuntia) ja kolme vaikeustasoa.
 - Sama kysymys kaikille. Valintaa voi vaihtaa, kunnes kaikki ovat vastanneet tai vastausaika päättyy.
-- **Vapaa** kokoaa kysymykset useista kategorioista valitulla vaikeustasolla. Kysymyksen oma kategoria näkyy pelissä.
+- **Kaikki aihealueet** kokoaa kysymykset koko pankista. **Pelaajien valitsemat** käyttää odotushuoneessa varattuja aiheita. Jokainen voi varata yhden vapaan aiheen. Kysymyksen oma aihealue näkyy pelissä.
 - Oikeasta lopullisesta valinnasta saa 600–1000 pistettä sen lähetysajan mukaan.
 - Välitulokset, oikean vastauksen paljastus ja lopulliset sijoitukset.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
-- Kysymykset voidaan luoda Gemini API:lla **huoneen luontivaiheessa**, jotta kierrosten väliin ei tule tekoälyviivettä.
+- API-asiakkaat voivat edelleen pyytää Geminiä luomaan valitsemansa vapaan aiheen kysymykset huoneen luonnin yhteydessä.
 - Ilman Gemini-avainta käytettävissä ovat kysymyspankki ja **120 valmista yleistietokysymystä**. Demotilassa valittu aihealue ja vaikeustaso eivät muuta kysymyksiä.
 
 ## Mitä tarvitaan?
@@ -61,11 +61,12 @@ Pelkkä HTML:n pudottaminen Netlify Dropiin **ei riitä**, sillä peli vaatii pa
 - Avaa sama Netlify-sivusto kahdella puhelimella tai kahdessa eri selaimessa.
 - Ensimmäinen luo pelin ja valitsee nimimerkin. Hän näkyy itse pelaajalistassa.
 - Toinen syöttää annetun koodin ja oman nimimerkin.
+- Jos käytössä on **Pelaajien valitsemat**, molemmat varaavat eri aihealueen. Aiheen vaihtaminen peruu pelaajan valmiusmerkinnän.
 - Molemmat painavat **Valmiina**. Peli alkaa, kun molemmat ovat valmiina. Kysymysten ja tulosten pitäisi päivittyä kummassakin laitteessa noin 1–2 sekunnin välein.
 
 ## Pelin toiminta ja rajoitukset
 
-**Palvelintekniikka:** Netlify Function käsittelee pyynnöt `/api/create`, `/api/join`, `/api/ready`, `/api/answer` ja `/api/state`. Funktio käyttää Supabasen Data REST API:a ja tietokantafunktioita (RPC). Pelilogiikka, vastausten oikeellisuus ja pisteytys pysyvät palvelinpuolella. Selain ei saa oikeaa vastausta ennen kierroksen paljastusvaihetta. Selain pollaa tilaa 1,25 sekunnin välein; erillistä Supabase Realtime -yhteyttä ei tarvita.
+**Palvelintekniikka:** Netlify Function käsittelee pyynnöt `/api/create`, `/api/join`, `/api/topic`, `/api/ready`, `/api/answer` ja `/api/state`. Funktio käyttää Supabasen Data REST API:a ja tietokantafunktioita (RPC). Pelilogiikka, vastausten oikeellisuus ja pisteytys pysyvät palvelinpuolella. Selain ei saa oikeaa vastausta ennen kierroksen paljastusvaihetta. Selain pollaa tilaa 1,25 sekunnin välein; erillistä Supabase Realtime -yhteyttä ei tarvita.
 
 **Istunnon palautus:** Pelaajatunniste tallennetaan kyseisen selaimen paikalliseen tallennustilaan, ja huoneen voi avata uudelleen samalla laitteella ja URL-osoitteella. Pelaajaa ei kuitenkaan voi tällä versiolla poistaa huoneesta; 10 paikan katto koskee myös yhteyden katkaisseita pelaajia.
 
@@ -116,10 +117,10 @@ Gemini-avainta ei koskaan laiteta HTML:ään, selaimen JavaScriptiin eikä GitHu
 
 ## Automaattisesti kasvava kysymyspankki (uusi versio)
 
-- Jokainen uusi peli pyytää Geminiä luomaan pelin kysymykset sekä **10 ylimääräistä varakysymystä** (kahdessa erässä).
+- Kun API-asiakas pyytää Geminiä luomaan kysymykset omasta aiheesta, peli pyytää myös **10 varakysymystä**.
 - Uudet, suodatetut Gemini-kysymykset tallennetaan Supabasen `quiz_question_bank`-tauluun. Normalisoitu kysymystunniste estää saman kysymystekstin tallentamisen kahdesti.
 - Peli vertaa kysymyksiä kymmenen viimeisimmän huoneen kysymyksiin. Gemini saa aiempia kysymystekstejä vältettäväksi, ja peli suodattaa myös läheiset sanamuodot, joilla on sama oikea vastaus.
-- **Vapaa** käyttää kysymyspankin kategorioita ilman Geminiä. Valinta vuorottelee kategorioiden välillä ja suosii kysymyksiä, joita ei ole ollut viime peleissä. Pelin kysymyspankkiin on lisätty 500 suomenkielistä kysymystä kymmenestä kategoriasta.
+- Pelin aihealueet ovat maantieto, historia, tiede, luonto, kirjallisuus ja taide, musiikki, urheilu, teknologia, matematiikka sekä ruoka ja juoma. Peli suosii kysymyksiä, joita ei ole ollut viime peleissä. Pelaajien valitsemassa pelissä kysymykset poimitaan mahdollisimman tasaisesti varatuista aiheista ja niitä täydennetään tarvittaessa saman aiheen lähimmältä vaikeustasolta. Jos kysymyksiä on vähemmän kuin pelaajia, mukaan mahtuvat aiheet arvotaan.
 - Jos uusia kysymyksiä ei saada tarpeeksi, käytetään saman aihealueen ja vaikeustason kysymyspankkia ja sitten varakysymyksiä. Jos varavalikoima on jo käyty läpi, pisimpään poissa olleet varakysymykset palaavat ensin.
 - Ilman `GEMINI_API_KEY`-avainta peli toimii kysymyspankilla ja demokysymyksillä. Ilmaiskiintiö ei ole rajaton; kysymysten generointi voi myös epäonnistua muista syistä.
 - **Tärkeä päivitys vanhaan Supabaseen:** suorita **päivitetty koko `supabase.sql`** Supabase SQL Editorissa uudelleen, sillä myös `quiz_create_room`-funktion sallittuja lähdearvoja on muutettu. SQL käyttää `create or replace`-rakennetta eikä poista aiempia pelihuoneita. Ota silti varmuuskopio ennen muutoksia.
