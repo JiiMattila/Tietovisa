@@ -89,7 +89,7 @@ async function generateQuestions(total, topic, difficulty) {
   };
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 45000);
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
   // Mallin nimi on ylläpidon asetus, ei koskaan selaimesta saatu syöte.
   if (!/^[a-zA-Z0-9._-]+$/.test(model)) throw new Error('Virheellinen GEMINI_MODEL-asetus.');
   let response;
