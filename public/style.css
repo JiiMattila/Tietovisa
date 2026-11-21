@@ -10,3 +10,14 @@
 }
 .player-answer.correct { color: var(--accent); }
 .player-answer.wrong { color: var(--red); }
+
+.rematch-dialog {
+  width: min(440px, calc(100% - 36px));
+  max-height: calc(100dvh - 36px);
+  color: var(--text);
+  margin: auto;
+}
+.rematch-dialog::backdrop { background: #090f1ccd; }
+.rematch-dialog .button-row { margin-top: 18px; }
+.rematch-status { margin-bottom: 0; }
+.rematch-leave { margin-top: 10px; }

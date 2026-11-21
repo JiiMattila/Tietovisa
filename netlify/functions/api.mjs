@@ -261,7 +261,7 @@ const validateAuth = data => {
 export default async (request) => {
   if (request.method !== 'POST') return json({ error: 'Käytä POST-pyyntöä.' }, 405);
   const action = new URL(request.url).pathname.split('/').filter(Boolean).at(-1);
-  if (!['create', 'join', 'state', 'start', 'ready', 'topic', 'answer'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
+  if (!['create', 'join', 'state', 'start', 'ready', 'topic', 'answer', 'rematch'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
   try {
     const data = await request.json();
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Virheellinen pyyntö.');
@@ -317,6 +317,10 @@ export default async (request) => {
     if (action === 'topic') {
       if (typeof data.topic !== 'string' || data.topic.length > 80) throw new Error('Virheellinen aihealue.');
       return json(await rpc('quiz_choose_topic', { ...auth, p_topic: data.topic }));
+    }
+    if (action === 'rematch') {
+      if (typeof data.accept !== 'boolean') throw new Error('Virheellinen vastaus uusintakutsuun.');
+      return json(await rpc('quiz_rematch', { ...auth, p_accept: data.accept }));
     }
     if (action === 'answer') {
       const choice = Number(data.choice ?? NaN);
