@@ -13,6 +13,7 @@ globalThis.fetch=async (url,options) => {
     return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({questions:pool.slice(generated-count,generated)})}]}}]});
   }
   const body=JSON.parse(options.body);
+  if(url.endsWith('quiz_recent_questions')) return Response.json([]);
   if(url.endsWith('quiz_bank_save')) {saved=body.p_items.length;return Response.json(saved);}
   if(url.endsWith('quiz_bank_pick')) {picked++;return Response.json([]);}
   if(url.endsWith('quiz_create_room')) {created=body;return Response.json({code:body.p_code,playerId:'00000000-0000-4000-8000-000000000001'});}
@@ -27,6 +28,7 @@ assert.equal(created.p_questions.length,20);assert.equal(created.p_question_sour
 globalThis.fetch=async(url,options)=>{
  if(url.includes('generativelanguage.googleapis.com'))return Response.json({error:{message:'quota'}},{status:429});
  const body=JSON.parse(options.body);
+ if(url.endsWith('quiz_recent_questions')) return Response.json([]);
  if(url.endsWith('quiz_bank_pick')) {picked++;return Response.json(pool.slice(0,20));}
  if(url.endsWith('quiz_create_room')) {created=body;return Response.json({code:body.p_code,playerId:'00000000-0000-4000-8000-000000000001'});}
  throw Error(url);

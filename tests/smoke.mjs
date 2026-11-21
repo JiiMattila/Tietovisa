@@ -6,9 +6,9 @@ process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_fixture';
 delete process.env.GEMINI_API_KEY;
 
-const q = getDemoQuestions(50);
-assert.equal(q.length, 50);
-assert.equal(new Set(q.map(x=>x.text)).size,50);
+const q = getDemoQuestions();
+assert.equal(q.length, 120);
+assert.equal(new Set(q.map(x=>x.text)).size, q.length);
 for (const item of q) {
   assert.equal(item.options.length,5);
   assert.equal(new Set(item.options).size,5);
@@ -21,6 +21,7 @@ globalThis.fetch = async (url,options) => {
   const body = JSON.parse(options.body);
   sent.push({url,body,headers:options.headers});
   assert.ok(!options.headers.Authorization, 'New secret keys must not be sent as JWT');
+  if (url.endsWith('/quiz_recent_questions')) return Response.json([]);
   if (url.endsWith('/quiz_bank_pick')) return Response.json([]);
   if (url.endsWith('/quiz_create_room')) {
     assert.equal(body.p_questions.length, 20);
@@ -69,5 +70,5 @@ assert.equal((await post('answer',{...creds,choice:3,roundIndex:-1})).status,400
 assert.equal((await post('answer',{...creds,choice:3,roundIndex:null})).status,400);
 assert.equal((await post('answer',{...creds,choice:5})).status,400);
 assert.equal((await post('state',{...creds,secret:'x'})).status,400);
-console.log('OK: 50 demo questions, creation, join, state, readiness, answer, invalid input.');
+console.log('OK: 120 demo questions, creation, join, state, readiness, answer, invalid input.');
 console.log(`API mock calls: ${sent.length}`);

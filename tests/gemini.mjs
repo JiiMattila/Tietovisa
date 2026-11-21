@@ -22,6 +22,7 @@ globalThis.fetch = async (url, opts) => {
     return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({questions})}]}}]});
   }
   const body = JSON.parse(opts.body);
+  if (url.endsWith('/quiz_recent_questions')) return Response.json([]);
   if (url.endsWith('/quiz_bank_save')) {
     saved = body;
     return Response.json(body.p_items.length);

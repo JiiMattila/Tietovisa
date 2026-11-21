@@ -64,7 +64,7 @@ function renderHome() {
         <h2>Luo uusi peli</h2>
         <p class="panel-desc">Valitse asetukset. Sinäkin pelaat mukana, mutta saat aloittaa kilpailun.</p>
         ${formField('Oma nimimerkki','create-name','Esim. Tietäjä99','','autocomplete="nickname"')}
-        <div class="field"><label for="topic">Aihealue</label><input id="topic" name="topic" placeholder="Esim. yleistieto, historia, musiikki..." value="Yleistieto" maxlength="80" required><small>Vapaa aihealue toimii, kun Gemini-avain on määritetty.</small></div>
+        <div class="field"><label for="topic">Aihealue</label><input id="topic" name="topic" list="topics" placeholder="Esim. yleistieto, historia, musiikki..." value="Yleistieto" maxlength="80" required><datalist id="topics"><option value="Vapaa"></option><option value="Yleistieto"></option></datalist><small>Valitse Vapaa, jos haluat kysymyksiä useasta eri kategoriasta.</small></div>
         <div class="twocol">
           <div class="field"><label for="total">Kysymyksiä</label><select id="total" name="total"><option value="5">5 kysymystä</option><option value="10" selected>10 kysymystä</option><option value="15">15 kysymystä</option><option value="20">20 kysymystä</option><option value="30">30 kysymystä</option></select></div>
           <div class="field"><label for="timer">Aika / kysymys</label><select id="timer" name="timer"><option value="10">10 sekuntia</option><option value="15" selected>15 sekuntia</option><option value="20">20 sekuntia</option><option value="30">30 sekuntia</option><option value="45">45 sekuntia</option><option value="60">60 sekuntia</option></select></div>
@@ -136,7 +136,7 @@ function renderQuestion() {
   app.innerHTML = `<div class="game-top"><span class="progress-label">KYSYMYS ${index+1} / ${state.total}</span><span class="chip ${reveal?'':'chip-green'}">${reveal?'✓ Oikea vastaus':'● KYSYMYS KÄYNNISSÄ'}</span></div>
     <div class="progress-strip"><div class="progress-fill" style="width:${((index+1)/state.total)*100}%"></div></div>
     <section class="layout"><div>
-      <div class="question-area"><div class="question-category"><span>${escapeHtml(state.topic)}</span><span>${escapeHtml(state.difficulty)}</span></div><h1 class="question-text">${escapeHtml(q.text)}</h1></div>
+      <div class="question-area"><div class="question-category"><span>${escapeHtml(q.category || state.topic)}</span><span>${escapeHtml(state.difficulty)}</span></div><h1 class="question-text">${escapeHtml(q.text)}</h1></div>
       <div class="timer-row"><span class="muted" style="font-size:.83rem">${reveal?'Seuraava kysymys':'Aikaa jäljellä'}</span><div class="timer-track"><div id="timer-bar" class="timer-bar"></div></div><span id="timer-value" class="timer-value">--</span></div>
       <div class="answer-grid">${q.options.map((option,i) => {
         const classes = ['answer'];

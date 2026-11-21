@@ -208,7 +208,7 @@ begin
   select * into r from public.quiz_rooms where id=r.id;
   if r.status in ('question','reveal') then
     v_q := r.questions -> r.round_index;
-    v_public_q := jsonb_build_object('text',v_q->>'text','options',v_q->'options');
+    v_public_q := jsonb_build_object('text',v_q->>'text','options',v_q->'options','category',v_q->>'category');
     if r.status='reveal' then
       v_public_q := v_public_q || jsonb_build_object(
         'answerIndex',(v_q->>'answerIndex')::integer,'explanation',v_q->>'explanation');
@@ -262,6 +262,27 @@ grant execute on function public.quiz_advance_room(uuid) to service_role;
 notify pgrst, 'reload schema';
 
 -- KYSYMYSPANKKI: suorita tämä osuus myös vanhaan Supabase-projektiin päivityksen yhteydessä.
+create index if not exists quiz_rooms_recent_idx on public.quiz_rooms(created_at desc,id desc);
+
+create or replace function public.quiz_recent_questions()
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  with recent_rooms as (
+    select id, created_at, questions
+    from public.quiz_rooms
+    order by created_at desc, id desc
+    limit 10
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'text', q.item->>'text',
+    'answer', q.item->'options'->>((q.item->>'answerIndex')::integer)
+  ) order by r.created_at desc, r.id desc, q.position), '[]'::jsonb)
+  from recent_rooms r
+  cross join lateral jsonb_array_elements(r.questions) with ordinality as q(item, position);
+$$;
+
+revoke all on function public.quiz_recent_questions() from public, anon, authenticated;
+grant execute on function public.quiz_recent_questions() to service_role;
+
 create table if not exists public.quiz_question_bank (
   fingerprint text primary key,
   topic text not null,
@@ -307,7 +328,7 @@ create or replace function public.quiz_bank_pick(
 declare selected jsonb;
 begin
   if p_limit not between 0 and 30 or p_difficulty not in ('helppo','keskitaso','vaikea')
-     or length(p_topic) not between 1 and 80 or coalesce(array_length(p_exclude,1),0) > 100 then
+     or length(p_topic) not between 1 and 80 or cardinality(p_exclude) > 400 then
     raise exception 'Virheellinen pankkihaku';
   end if;
   -- FOR UPDATE SKIP LOCKED estää samanaikaisen varauksen törmäykset.
@@ -326,6 +347,43 @@ begin
 end;
 $$;
 
+create or replace function public.quiz_bank_pick_varied(
+  p_topics text[], p_difficulty text, p_limit integer, p_exclude text[], p_recent text[]
+) returns jsonb language plpgsql security invoker set search_path = '' as $$
+declare selected jsonb;
+begin
+  if p_limit not between 1 and 30 or p_difficulty not in ('helppo','keskitaso','vaikea')
+     or cardinality(p_topics) not between 1 and 15 or cardinality(p_exclude) > 40
+     or cardinality(p_recent) > 300 then
+    raise exception 'Virheelliset aihevalikoiman asetukset';
+  end if;
+
+  with eligible as (
+    select b.fingerprint, lower(b.topic) as category, b.used_count,
+      array_position(p_recent,b.fingerprint) as recent_position
+    from public.quiz_question_bank b
+    where lower(b.topic)=any(p_topics) and b.difficulty=p_difficulty
+      and not (b.fingerprint=any(p_exclude))
+  ), ranked as (
+    select e.*, row_number() over (
+      partition by e.category
+      order by (e.recent_position is not null), e.recent_position desc nulls last, e.used_count, random()
+    ) as turn
+    from eligible e
+  ), candidates as (
+    select b.fingerprint
+    from ranked r join public.quiz_question_bank b on b.fingerprint=r.fingerprint
+    order by (r.recent_position is not null), r.turn, random()
+    limit p_limit for update of b skip locked
+  ), updated as (
+    update public.quiz_question_bank b set used_count=b.used_count+1
+    from candidates c where b.fingerprint=c.fingerprint
+    returning b.question || jsonb_build_object('category',b.topic) as question
+  ) select coalesce(jsonb_agg(question),'[]'::jsonb) into selected from updated;
+  return selected;
+end;
+$$;
+
 -- 'mixed' ja 'bank' sallitaan uusissa huoneissa.
 alter table public.quiz_rooms drop constraint if exists quiz_rooms_question_source_check;
 alter table public.quiz_rooms add constraint quiz_rooms_question_source_check
@@ -333,6 +391,8 @@ alter table public.quiz_rooms add constraint quiz_rooms_question_source_check
 
 revoke all on function public.quiz_bank_save(text,text,jsonb) from public, anon, authenticated;
 revoke all on function public.quiz_bank_pick(text,text,integer,text[]) from public, anon, authenticated;
+revoke all on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[]) from public, anon, authenticated;
 grant execute on function public.quiz_bank_save(text,text,jsonb) to service_role;
 grant execute on function public.quiz_bank_pick(text,text,integer,text[]) to service_role;
+grant execute on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[]) to service_role;
 notify pgrst, 'reload schema';
