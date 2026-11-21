@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import handler from '../netlify/functions/api.mjs';
+import { getDemoQuestions } from '../netlify/functions/question-bank.mjs';
+
+process.env.SUPABASE_URL = 'https://example.supabase.co';
+process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_fixture';
+delete process.env.GEMINI_API_KEY;
+
+const q = getDemoQuestions(50);
+assert.equal(q.length, 50);
+assert.equal(new Set(q.map(x=>x.text)).size,50);
+for (const item of q) {
+  assert.equal(item.options.length,5);
+  assert.equal(new Set(item.options).size,5);
+  assert.ok(Number.isInteger(item.answerIndex) && item.answerIndex>=0 && item.answerIndex<5);
+  assert.ok(item.options[item.answerIndex]);
+}
+
+let sent = [];
+globalThis.fetch = async (url,options) => {
+  const body = JSON.parse(options.body);
+  sent.push({url,body,headers:options.headers});
+  assert.ok(!options.headers.Authorization, 'New secret keys must not be sent as JWT');
+  if (url.endsWith('/quiz_bank_pick')) return Response.json([]);
+  if (url.endsWith('/quiz_create_room')) {
+    assert.equal(body.p_questions.length, 20);
+    assert.equal(body.p_question_source, 'demo');
+    assert.equal(body.p_topic, 'Yleistieto (demo)');
+    assert.match(body.p_code,/^[A-HJ-NP-Z2-9]{6}$/);
+    assert.match(body.p_secret_hash,/^[a-f0-9]{64}$/);
+    return Response.json({code:body.p_code,playerId:'00000000-0000-4000-8000-000000000001'});
+  }
+  if (url.endsWith('/quiz_join_room')) {
+    return Response.json({code:body.p_code,playerId:'00000000-0000-4000-8000-000000000002'});
+  }
+  if (url.endsWith('/quiz_get_state')) return Response.json({status:'lobby',code:body.p_code,players:[]});
+  if (url.endsWith('/quiz_start_room')) return Response.json({ok:true});
+  if (url.endsWith('/quiz_submit_answer')) return Response.json({accepted:true});
+  throw new Error('Unexpected URL '+url);
+};
+const post = async (action,data) => {
+  const response = await handler(new Request(`https://play.netlify.app/api/${action}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)
+  }));
+  return {status:response.status,data:await response.json()};
+};
+const created = await post('create',{name:'Pelaaja yksi',topic:'Historia',total:20,timer:15,difficulty:'keskitaso'});
+assert.equal(created.status,200);
+assert.equal(created.data.secret.length,64);
+assert.match(created.data.code,/^[A-HJ-NP-Z2-9]{6}$/);
+const joined = await post('join',{name:'Pelaaja kaksi',code:created.data.code});
+assert.equal(joined.status,200);
+const creds = {code:created.data.code,secret:created.data.secret,playerId:created.data.playerId};
+assert.equal((await post('state',creds)).data.status,'lobby');
+assert.equal((await post('start',creds)).data.ok,true);
+assert.equal((await post('answer',{...creds,choice:3})).data.accepted,true);
+assert.equal((await post('answer',{...creds,choice:5})).status,400);
+assert.equal((await post('state',{...creds,secret:'x'})).status,400);
+console.log('OK: 50 demo questions, creation, join, state, start, answer, invalid input.');
+console.log(`API mock calls: ${sent.length}`);
