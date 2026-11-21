@@ -13,7 +13,7 @@ const normalize = text => text.normalize('NFKC').toLocaleLowerCase('fi')
 const fingerprint = question => createHash('sha256').update(normalize(question.text)).digest('hex');
 const recentEntry = question => ({text:question.text,answer:question.options[question.answerIndex]});
 const topics = ['Maantieto','Historia','Tiede','Luonto','Kirjallisuus ja taide',
-  'Musiikki','Urheilu','Teknologia','Matematiikka','Ruoka ja juoma'];
+  'Musiikki','Suomalainen musiikki','Elokuvat','Urheilu','Teknologia','Matematiikka','Ruoka ja juoma'];
 
 const rooms = [];
 async function create(topic, total = 30) {
@@ -49,7 +49,7 @@ globalThis.fetch = async (url, options) => {
   if (url.endsWith('/quiz_recent_questions')) return Response.json(rooms[0].p_questions.map(recentEntry));
   if (url.endsWith('/quiz_bank_pick_varied')) {
     assert.equal(params.p_difficulty, 'keskitaso');
-    assert.equal(params.p_limit, 10);
+    assert.equal(params.p_limit, topics.length);
     assert.equal(params.p_recent.length, 30);
     assert.deepEqual(new Set(params.p_topics), new Set(topics.map(normalize)));
     return Response.json(topics.map((topic, index) => ({
@@ -59,7 +59,7 @@ globalThis.fetch = async (url, options) => {
   if (url.endsWith('/quiz_create_room')) return saveRoom(params);
   assert.fail('Vapaa must fetch the diversified bank, not Gemini or an exact topic lookup');
 };
-const varied = await create('Vapaa aihealue', 10);
+const varied = await create('Vapaa aihealue', topics.length);
 assert.equal(varied.p_topic, 'Vapaa');
 assert.equal(varied.p_question_source, 'bank');
 assert.deepEqual(new Set(varied.p_questions.map(q => q.category)), new Set(topics));

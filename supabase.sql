@@ -66,7 +66,7 @@ grant select, insert, update, delete on public.quiz_rooms, public.quiz_players, 
 create or replace function public.quiz_topic_names()
 returns text[] language sql immutable security invoker set search_path = '' as $$
   select array['Maantieto','Historia','Tiede','Luonto','Kirjallisuus ja taide',
-    'Musiikki','Urheilu','Teknologia','Matematiikka','Ruoka ja juoma'];
+    'Musiikki','Suomalainen musiikki','Elokuvat','Urheilu','Teknologia','Matematiikka','Ruoka ja juoma'];
 $$;
 
 -- Atominen huoneen luonti. Ensimmäinen pelaaja on aina myös isäntä.
