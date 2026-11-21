@@ -21,3 +21,67 @@
 .rematch-dialog .button-row { margin-top: 18px; }
 .rematch-status { margin-bottom: 0; }
 .rematch-leave { margin-top: 10px; }
+
+.sound-controls {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.sound-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: .8rem;
+  cursor: pointer;
+}
+.sound-switch input {
+  appearance: none;
+  display: grid;
+  align-items: center;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid #52627e;
+  border-radius: 999px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.sound-switch input::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.sound-switch input:checked {
+  justify-items: end;
+  border-color: var(--accent);
+  background: var(--accentdark);
+}
+.sound-switch input:checked::before { background: var(--accent); }
+.sound-switch input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+.winner-quote {
+  max-width: 600px;
+  margin: 14px auto 22px;
+}
+.winner-quote blockquote { margin: 0; }
+.winner-quote blockquote p {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  font-style: italic;
+  line-height: 1.5;
+}
+.winner-quote figcaption {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: .8rem;
+}

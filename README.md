@@ -11,8 +11,10 @@ Nörttien Arvauskeskus on selainpohjainen tietovisa. Yhdessä huoneessa voi olla
 - **Kaikki aihealueet** kokoaa kysymykset koko pankista. **Pelaajien valitsemat** käyttää odotushuoneessa varattuja aiheita. Jokainen voi varata yhden vapaan aiheen. Kysymyksen oma aihealue näkyy pelissä.
 - Oikeasta lopullisesta valinnasta saa 600–1000 pistettä sen lähetysajan mukaan.
 - Välitulokset, oikean vastauksen paljastus ja lopulliset sijoitukset.
+- Pelin päättyessä arvottu Matti Nykäsen lausahdus näkyy kaikille pelaajille voittajan nimen alla.
 - Tulosruudun **Pelaa uudestaan** lähettää muille pelaajille 30 sekunnin uusintakutsun. Hyväksyneet siirtyvät uuteen odotushuoneeseen samalla aihevalintatavalla.
 - Puhelimilla toimiva responsiivinen käyttöliittymä, ei rekisteröitymistä.
+- Taustamusiikki ja peliäänet käynnistyvät sivun ensimmäisen painalluksen jälkeen. Yläreunan kytkimet säätävät niitä erikseen, ja selain muistaa valinnat.
 - API-asiakkaat voivat edelleen pyytää Geminiä luomaan valitsemansa vapaan aiheen kysymykset huoneen luonnin yhteydessä.
 - Ilman Gemini-avainta käytettävissä ovat kysymyspankki ja **120 valmista yleistietokysymystä**. Demotilassa valittu aihealue ja vaikeustaso eivät muuta kysymyksiä.
 
@@ -121,7 +123,7 @@ Gemini-avainta ei koskaan laiteta HTML:ään, selaimen JavaScriptiin eikä GitHu
 - Kun API-asiakas pyytää Geminiä luomaan kysymykset omasta aiheesta, peli pyytää myös **10 varakysymystä**.
 - Uudet, suodatetut Gemini-kysymykset tallennetaan Supabasen `quiz_question_bank`-tauluun. Normalisoitu kysymystunniste estää saman kysymystekstin tallentamisen kahdesti.
 - Peli vertaa kysymyksiä kymmenen viimeisimmän huoneen kysymyksiin. Gemini saa aiempia kysymystekstejä vältettäväksi, ja peli suodattaa myös läheiset sanamuodot, joilla on sama oikea vastaus.
-- Pelin aihealueet ovat maantieto, historia, tiede, luonto, kirjallisuus ja taide, musiikki, urheilu, teknologia, matematiikka sekä ruoka ja juoma. Peli suosii kysymyksiä, joita ei ole ollut viime peleissä. Pelaajien valitsemassa pelissä kysymykset poimitaan mahdollisimman tasaisesti varatuista aiheista ja niitä täydennetään tarvittaessa saman aiheen lähimmältä vaikeustasolta. Jos kysymyksiä on vähemmän kuin pelaajia, mukaan mahtuvat aiheet arvotaan.
+- Pelin aihealueet ovat maantieto, historia, tiede, luonto, kirjallisuus ja taide, musiikki, suomalainen musiikki, elokuvat, urheilu, teknologia, matematiikka sekä ruoka ja juoma. Peli suosii kysymyksiä, joita ei ole ollut viime peleissä. Pelaajien valitsemassa pelissä kysymykset poimitaan mahdollisimman tasaisesti varatuista aiheista ja niitä täydennetään tarvittaessa saman aiheen lähimmältä vaikeustasolta. Jos kysymyksiä on vähemmän kuin pelaajia, mukaan mahtuvat aiheet arvotaan.
 - Jos uusia kysymyksiä ei saada tarpeeksi, käytetään saman aihealueen ja vaikeustason kysymyspankkia ja sitten varakysymyksiä. Jos varavalikoima on jo käyty läpi, pisimpään poissa olleet varakysymykset palaavat ensin.
 - Ilman `GEMINI_API_KEY`-avainta peli toimii kysymyspankilla ja demokysymyksillä. Ilmaiskiintiö ei ole rajaton; kysymysten generointi voi myös epäonnistua muista syistä.
 - **Tärkeä päivitys vanhaan Supabaseen:** suorita **päivitetty koko `supabase.sql`** Supabase SQL Editorissa uudelleen, sillä myös `quiz_create_room`-funktion sallittuja lähdearvoja on muutettu. SQL käyttää `create or replace`-rakennetta eikä poista aiempia pelihuoneita. Ota silti varmuuskopio ennen muutoksia.

@@ -16,7 +16,7 @@ const cleanName = value => String(value ?? '').trim().replace(/\s+/g, ' ').slice
 const hash = secret => createHash('sha256').update(secret).digest('hex');
 const BANK_EXTRA = 10;
 const VARIED_TOPICS = ['maantieto','historia','tiede','luonto','kirjallisuus ja taide',
-  'musiikki','urheilu','teknologia','matematiikka','ruoka ja juoma'];
+  'musiikki','suomalainen musiikki','elokuvat','urheilu','teknologia','matematiikka','ruoka ja juoma'];
 const CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

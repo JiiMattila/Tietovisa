@@ -1,3 +1,5 @@
+import { playGameSound } from './audio.js';
+
 const app = document.querySelector('#app');
 const toastEl = document.querySelector('#toast');
 const letters = ['A','B','C','D','E'];
@@ -56,7 +58,7 @@ function renderHome() {
       <div class="eyebrow">✦ HAASTA KAVERISI</div>
       <h1 class="display">Tietoa. Nopeutta.<br><em>Yksi voittaja.</em></h1>
       <p class="lead">Kerää kaverit kasaan, luo pelikoodi ja ottakaa mittaa toisistanne. Sama kysymys kaikille, viisi vaihtoehtoa ja yksi oikea vastaus. Pelaa suoraan selaimessa.</p>
-      <div class="metrics"><span class="metric"><span class="metric-icon">♟</span> 1–10 pelaajaa</span><span class="metric"><span class="metric-icon">◷</span> Reaaliaikaiset kierrokset</span><span class="metric"><span class="metric-icon">✦</span> 10 aihealuetta</span></div>
+      <div class="metrics"><span class="metric"><span class="metric-icon">♟</span> 1–10 pelaajaa</span><span class="metric"><span class="metric-icon">◷</span> Reaaliaikaiset kierrokset</span><span class="metric"><span class="metric-icon">✦</span> 12 aihealuetta</span></div>
     </div></section>
     <section class="panels">
       <form id="create-form" class="panel">
@@ -190,7 +192,9 @@ function renderFinished() {
   const topNames = sorted.filter(p => p.score===winner.score).map(p=>p.name);
   document.title = 'Lopputulokset — Nörttien Arvauskeskus';
   app.innerHTML = `<section class="podium"><div class="eyebrow">KILPAILU PÄÄTTYNYT</div><div class="winner-trophy">🏆</div>
-    <h1 class="winner-name">${escapeHtml(topNames.join(' & '))}</h1><p>${topNames.length===1?'Onnittelut voittajalle!':'Tasapeli kärjessä!'} Paras pistemäärä: <strong class="highlight">${winner.score.toLocaleString('fi-FI')} p</strong></p></section>
+    <h1 class="winner-name">${escapeHtml(topNames.join(' & '))}</h1>
+    ${state.winnerQuote?`<figure class="winner-quote"><blockquote><p>”${escapeHtml(state.winnerQuote)}”</p></blockquote><figcaption>Matti Nykänen</figcaption></figure>`:''}
+    <p>${topNames.length===1?'Onnittelut voittajalle!':'Tasapeli kärjessä!'} Paras pistemäärä: <strong class="highlight">${winner.score.toLocaleString('fi-FI')} p</strong></p></section>
     <section class="finish-board"><div class="panel"><div class="player-header"><h2>Lopputulokset</h2><span class="count-pill">${sorted.length} pelaajaa</span></div><div class="player-list">
     ${sorted.map((p,i)=>`<div class="player"><span class="rank-num">${i+1}.</span><span class="avatar ${i%2?'alt':''}">${escapeHtml(p.name.charAt(0).toUpperCase())}</span><div class="player-grow"><span class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</span></div><span class="score">${p.score.toLocaleString('fi-FI')} p</span></div>`).join('')}</div>
     <div class="divider"></div>${renderRematch(state.rematch)}
@@ -265,7 +269,16 @@ async function refreshState(player) {
     state = next;
     lastRoundKey = key;
     if (!sameResults) render();
-    if (wasDifferent && next.status==='finished') toast('Kilpailu päättyi!');
+    if (wasDifferent) {
+      if (next.status==='question') playGameSound('question');
+      if (next.status==='reveal' && Number.isInteger(next.myAnswer)) {
+        playGameSound(next.myAnswer===next.question?.answerIndex ? 'correct' : 'wrong');
+      }
+      if (next.status==='finished') {
+        playGameSound('finished');
+        toast('Kilpailu päättyi!');
+      }
+    }
   } catch (err) {
     if (identity!==player) return;
     // Verkon väliaikainen katkeaminen ei vie pelaajaa pois huoneesta.
@@ -338,6 +351,7 @@ async function changeRoom(action,payload) {
   render();
   try {
     await api(action, {...credentials(),...payload});
+    if (action==='answer' && identity===player) playGameSound('answer');
   } catch(err) {
     if (identity===player) toast(err.message);
   } finally {
