@@ -261,7 +261,7 @@ const validateAuth = data => {
 export default async (request) => {
   if (request.method !== 'POST') return json({ error: 'Käytä POST-pyyntöä.' }, 405);
   const action = new URL(request.url).pathname.split('/').filter(Boolean).at(-1);
-  if (!['create', 'join', 'state', 'start', 'ready', 'answer'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
+  if (!['create', 'join', 'state', 'start', 'ready', 'topic', 'answer'].includes(action)) return json({ error: 'Tuntematon toiminto.' }, 404);
   try {
     const data = await request.json();
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Virheellinen pyyntö.');
@@ -269,7 +269,9 @@ export default async (request) => {
       const name = cleanName(data.name);
       const total = Number(data.total);
       const timer = Number(data.timer);
-      const topic = String(data.topic ?? '').trim().slice(0, 80) || 'Yleistieto';
+      const mode = data.topicMode;
+      if (mode !== undefined && !['all','players'].includes(mode)) throw new Error('Virheellinen aihealueiden valintatapa.');
+      const topic = mode === 'all' ? 'Vapaa' : String(data.topic ?? '').trim().slice(0, 80) || 'Yleistieto';
       const difficulty = String(data.difficulty ?? 'keskitaso');
       if (!name || name.length > 20 || !Number.isInteger(total) || total < 5 || total > 30 ||
           !Number.isInteger(timer) || timer < 10 || timer > 60 ||
@@ -277,14 +279,17 @@ export default async (request) => {
         throw new Error('Tarkista nimi, kysymysten määrä, aika ja vaikeustaso.');
       }
       const secret = randomBytes(32).toString('hex');
-      const { questions, source, topic: actualTopic } = await prepareQuestions(total, topic, difficulty);
+      const { questions, source, topic: actualTopic } = mode === 'players'
+        ? { questions: [], source: 'bank', topic: 'Pelaajien valitsemat' }
+        : await prepareQuestions(total, topic, difficulty);
       let created;
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           created = await rpc('quiz_create_room', {
             p_code: makeCode(), p_name: name, p_secret_hash: hash(secret),
             p_total: total, p_timer: timer, p_topic: actualTopic, p_difficulty: difficulty,
-            p_question_source: source, p_questions: questions
+            p_question_source: source, p_questions: questions,
+            ...(mode === 'players' ? { p_topic_mode: mode } : {})
           });
           break;
         } catch (err) {
@@ -308,6 +313,10 @@ export default async (request) => {
     if (action === 'ready') {
       if (typeof data.ready !== 'boolean') throw new Error('Virheellinen valmiustieto.');
       return json(await rpc('quiz_set_ready', { ...auth, p_ready: data.ready }));
+    }
+    if (action === 'topic') {
+      if (typeof data.topic !== 'string' || data.topic.length > 80) throw new Error('Virheellinen aihealue.');
+      return json(await rpc('quiz_choose_topic', { ...auth, p_topic: data.topic }));
     }
     if (action === 'answer') {
       const choice = Number(data.choice ?? NaN);

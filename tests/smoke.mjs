@@ -23,10 +23,12 @@ globalThis.fetch = async (url,options) => {
   assert.ok(!options.headers.Authorization, 'New secret keys must not be sent as JWT');
   if (url.endsWith('/quiz_recent_questions')) return Response.json([]);
   if (url.endsWith('/quiz_bank_pick')) return Response.json([]);
+  if (url.endsWith('/quiz_bank_pick_varied')) return Response.json(q.slice(0,body.p_limit));
   if (url.endsWith('/quiz_create_room')) {
-    assert.equal(body.p_questions.length, 20);
-    assert.equal(body.p_question_source, 'demo');
-    assert.equal(body.p_topic, 'Yleistieto (demo)');
+    const playersChoose = body.p_topic_mode === 'players';
+    assert.equal(body.p_questions.length, playersChoose ? 0 : 20);
+    assert.equal(body.p_question_source, playersChoose || body.p_topic === 'Vapaa' ? 'bank' : 'demo');
+    if (playersChoose) assert.equal(body.p_topic, 'Pelaajien valitsemat');
     assert.match(body.p_code,/^[A-HJ-NP-Z2-9]{6}$/);
     assert.match(body.p_secret_hash,/^[a-f0-9]{64}$/);
     return Response.json({code:body.p_code,playerId:'00000000-0000-4000-8000-000000000001'});
@@ -37,6 +39,7 @@ globalThis.fetch = async (url,options) => {
   if (url.endsWith('/quiz_get_state')) return Response.json({status:'lobby',code:body.p_code,players:[]});
   if (url.endsWith('/quiz_start_room')) return Response.json({ok:true});
   if (url.endsWith('/quiz_set_ready')) return Response.json({ok:true});
+  if (url.endsWith('/quiz_choose_topic')) return Response.json({ok:true});
   if (url.endsWith('/quiz_submit_answer')) return Response.json({accepted:true});
   throw new Error('Unexpected URL '+url);
 };
@@ -53,6 +56,17 @@ assert.match(created.data.code,/^[A-HJ-NP-Z2-9]{6}$/);
 const joined = await post('join',{name:'Pelaaja kaksi',code:created.data.code});
 assert.equal(joined.status,200);
 const creds = {code:created.data.code,secret:created.data.secret,playerId:created.data.playerId};
+const settings = {name:'Testi',topic:'Historia',total:20,timer:15,difficulty:'keskitaso'};
+assert.equal((await post('create',{...settings,topicMode:'all'})).status,200);
+assert.equal(sent.at(-1).body.p_topic,'Vapaa');
+const callsBeforeLobby = sent.length;
+assert.equal((await post('create',{...settings,topicMode:'players'})).status,200);
+assert.equal(sent.length,callsBeforeLobby+1,'Question selection waits for the lobby to finish');
+assert.equal((await post('create',{...settings,topicMode:'invalid'})).status,400);
+assert.equal((await post('topic',{...creds,topic:'Historia'})).data.ok,true);
+assert.ok(sent.at(-1).url.endsWith('/quiz_choose_topic'));
+assert.equal(sent.at(-1).body.p_topic,'Historia');
+assert.equal((await post('topic',{...creds,topic:null})).status,400);
 assert.equal((await post('state',creds)).data.status,'lobby');
 assert.equal((await post('start',creds)).data.ok,true);
 for (const ready of [true, false]) {
