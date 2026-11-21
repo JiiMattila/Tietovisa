@@ -88,6 +88,13 @@ function renderHome() {
 function roomTitle(title, sub, pill) {
   return `<div class="room-heading"><div><span class="eyebrow">NÖRTTIEN ARVAUSKESKUS / ${escapeHtml(state?.code || '')}</span><h1>${title}</h1><div class="room-subtitle">${sub}</div></div>${pill?`<span class="chip chip-green">${pill}</span>`:''}</div>`;
 }
+function renderPlayerAnswer(choice, question) {
+  if (choice === undefined) return '';
+  if (choice === null) return '<div class="player-answer muted">Ei vastannut</div>';
+  const correct = choice === question.answerIndex;
+  const result = correct ? '✓ Oikein' : '× Väärin';
+  return `<div class="player-answer ${correct ? 'correct' : 'wrong'}">${result} · ${letters[choice]} — ${escapeHtml(question.options[choice])}</div>`;
+}
 function renderPlayers(kind='lobby') {
   const players = state.players || [];
   const sorted = kind === 'lobby' ? players : [...players].sort((a,b) => b.score-a.score);
@@ -96,7 +103,7 @@ function renderPlayers(kind='lobby') {
     <div class="player-list">${sorted.map((p, idx) => `<div class="player">
       ${kind==='lobby'?'':`<div class="rank-num">${idx+1}.</div>`}
       <div class="avatar ${idx%2?'alt':''}">${escapeHtml(p.name.charAt(0).toUpperCase())}</div>
-      <div class="player-grow"><div class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</div>${p.isHost?'<span class="player-flag">PELİN LUOJA</span>':''}</div>
+      <div class="player-grow"><div class="player-name">${escapeHtml(p.name)}${p.id===state.meId?'<span class="player-me">(sinä)</span>':''}</div>${p.isHost?'<span class="player-flag">PELİN LUOJA</span>':''}${state.status==='reveal'?renderPlayerAnswer(p.choice,state.question):''}</div>
       ${kind==='lobby'?'':`<span class="score">${p.score.toLocaleString('fi-FI')} p</span>`}
       ${kind==='question'?`<span class="status-mark ${p.answered?'done':''}">${p.answered?'✓':'◷'}</span>`:''}
     </div>`).join('')}</div>

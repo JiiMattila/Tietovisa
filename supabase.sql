@@ -172,7 +172,7 @@ begin
 end;
 $$;
 
--- Palauttaa julkisen kysymystekstin mutta EI oikeaa vastausta ennen paljastusvaihetta.
+-- Oikea vastaus ja pelaajien valinnat jaetaan vasta paljastusvaiheessa.
 create or replace function public.quiz_get_state(
   p_code text, p_player_id uuid, p_secret_hash text
 ) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -203,10 +203,14 @@ begin
     'players',(select coalesce(jsonb_agg(jsonb_build_object(
       'id',p.id,'name',p.name,'score',p.score,
       'isHost',p.id=r.host_id,
-      'answered',exists(select 1 from public.quiz_answers a where a.room_id=r.id
-                         and a.round_index=r.round_index and a.player_id=p.id)
-    ) order by p.score desc, p.joined_at),'[]'::jsonb)
-      from public.quiz_players p where p.room_id=r.id)
+      'answered',a.player_id is not null
+    ) || case when r.status='reveal' then jsonb_build_object('choice',a.choice)
+              else '{}'::jsonb end
+      order by p.score desc, p.joined_at),'[]'::jsonb)
+      from public.quiz_players p
+      left join public.quiz_answers a on a.room_id=p.room_id and a.player_id=p.id
+        and a.round_index=r.round_index
+      where p.room_id=r.id)
   );
 end;
 $$;
