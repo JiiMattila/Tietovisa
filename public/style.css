@@ -67,3 +67,21 @@
 }
 .sound-switch input:checked::before { background: var(--accent); }
 .sound-switch input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+.winner-quote {
+  max-width: 600px;
+  margin: 14px auto 22px;
+}
+.winner-quote blockquote { margin: 0; }
+.winner-quote blockquote p {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  font-style: italic;
+  line-height: 1.5;
+}
+.winner-quote figcaption {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: .8rem;
+}
