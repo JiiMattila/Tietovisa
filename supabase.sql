@@ -39,7 +39,9 @@ alter table public.quiz_rooms
   add column if not exists rematch_host_id uuid,
   add column if not exists rematch_room_id uuid;
 alter table public.quiz_players add column if not exists rematch_response boolean;
-alter table public.quiz_rooms add column if not exists winner_quote text;
+alter table public.quiz_rooms
+  add column if not exists winner_quote text,
+  add column if not exists question_request_at timestamptz;
 
 create table if not exists public.quiz_answers (
   room_id uuid not null references public.quiz_rooms(id) on delete cascade,
@@ -219,9 +221,15 @@ end;
 $$;
 
 create or replace function public.quiz_set_ready(
-  p_code text, p_player_id uuid, p_secret_hash text, p_ready boolean
+  p_code text, p_player_id uuid, p_secret_hash text, p_ready boolean, p_generation jsonb
 ) returns jsonb language plpgsql security invoker set search_path = '' as $$
-declare r public.quiz_rooms%rowtype; v_questions jsonb; v_source text;
+declare
+  r public.quiz_rooms%rowtype;
+  v_questions jsonb;
+  v_source text;
+  v_topics text[];
+  v_generated jsonb := '[]'::jsonb;
+  v_error constant text := 'Valituista aihealueista ei löytynyt tarpeeksi kysymyksiä. Vaihtakaa aihetta tai kokeilkaa uudelleen.';
 begin
   select * into r from public.quiz_rooms where code=upper(trim(p_code)) for update;
   if not found or not exists
@@ -233,32 +241,72 @@ begin
     select 1 from public.quiz_players where room_id=r.id and id=p_player_id and chosen_topic is not null
   ) then raise exception 'Valitse ensin aihealue'; end if;
 
-  update public.quiz_players set ready=p_ready where room_id=r.id and id=p_player_id;
-  if not exists (select 1 from public.quiz_players where room_id=r.id and not ready) then
-    v_questions := r.questions;
-    v_source := r.question_source;
-    if jsonb_array_length(v_questions)=0 then
-      begin
-        v_questions := public.quiz_pick_player_topics(r.id,r.difficulty,r.question_total);
-        if jsonb_array_length(v_questions) <> r.question_total then
-          raise sqlstate 'QZ001';
-        end if;
-      exception when sqlstate 'QZ001' then
-        -- Kaikkien aiheiden pelin voi uusia myös tyhjällä kysymyspankilla.
-        if r.topic_mode='all' then
-          select questions,question_source into v_questions,v_source
-            from public.quiz_rooms where rematch_room_id=r.id;
-        end if;
-        if v_questions is null or jsonb_array_length(v_questions) <> r.question_total then
-          raise exception 'Valituista aihealueista ei löytynyt tarpeeksi kysymyksiä. Vaihtakaa aihetta tai kokeilkaa uudelleen.';
-        end if;
-      end;
+  if p_generation ? 'startedAt' then
+    if r.question_request_at is null or r.question_request_at is distinct from (p_generation->>'startedAt')::timestamptz then
+      raise exception 'Kysymyspyyntö on vanhentunut. Merkitse itsesi uudelleen valmiiksi';
     end if;
-    update public.quiz_rooms set status='question',round_index=0,
-      question_started_at=clock_timestamp(),questions=v_questions,question_source=v_source where id=r.id;
+    update public.quiz_rooms set question_request_at=null where id=r.id;
   end if;
+
+  if not p_ready or exists (
+    select 1 from public.quiz_players where room_id=r.id and id<>p_player_id and not ready
+  ) then
+    update public.quiz_players set ready=p_ready where room_id=r.id and id=p_player_id;
+    return jsonb_build_object('ok',true);
+  end if;
+
+  v_questions := r.questions;
+  v_source := r.question_source;
+  if jsonb_array_length(v_questions)=0 then
+    if p_generation is not null then
+      v_topics := case when r.topic_mode='all' then public.quiz_topic_names()
+        else array(select chosen_topic from public.quiz_players where room_id=r.id order by chosen_topic)
+        end;
+      if p_generation='{}'::jsonb then
+        -- Varaa haku huoneelle, mutta vapauta huoneen lukko Geminin pyynnön ajaksi.
+        if r.question_request_at > clock_timestamp()-interval '35 seconds' then
+          raise exception 'Kysymyksiä haetaan jo. Odota hetki ja yritä uudelleen';
+        end if;
+        update public.quiz_rooms set question_request_at=clock_timestamp() where id=r.id
+          returning question_request_at into r.question_request_at;
+        return jsonb_build_object('generation',jsonb_build_object('startedAt',r.question_request_at,
+          'total',r.question_total,'topic',r.topic,'difficulty',r.difficulty,'topics',v_topics));
+      end if;
+      -- Uusi pelaaja tai aihevalinnan muutos voi vaihtaa aihejoukkoa haun aikana.
+      if p_generation->'topics'=to_jsonb(v_topics) then
+        v_generated := p_generation->'questions';
+      end if;
+    end if;
+
+    v_source := case jsonb_array_length(v_generated) when r.question_total then 'ai' when 0 then 'bank' else 'mixed' end;
+    begin
+      v_questions := public.quiz_pick_player_topics(r.id,r.difficulty,r.question_total,v_generated);
+      if jsonb_array_length(v_questions) <> r.question_total then
+        raise sqlstate 'QZ001';
+      end if;
+    exception when sqlstate 'QZ001' then
+      -- Kaikkien aiheiden pelin voi uusia myös tyhjällä kysymyspankilla.
+      if r.topic_mode='all' then
+        select questions,question_source into v_questions,v_source
+          from public.quiz_rooms where rematch_room_id=r.id;
+      end if;
+      if v_questions is null or jsonb_array_length(v_questions) <> r.question_total then
+        if p_generation is null then raise exception '%', v_error; end if;
+        return jsonb_build_object('error',v_error);
+      end if;
+    end;
+  end if;
+  update public.quiz_players set ready=true where room_id=r.id and id=p_player_id;
+  update public.quiz_rooms set status='question',round_index=0,question_request_at=null,
+    question_started_at=clock_timestamp(),questions=v_questions,question_source=v_source where id=r.id;
   return jsonb_build_object('ok',true);
 end;
+$$;
+
+create or replace function public.quiz_set_ready(
+  p_code text, p_player_id uuid, p_secret_hash text, p_ready boolean
+) returns jsonb language sql security invoker set search_path = '' as $$
+  select public.quiz_set_ready(p_code,p_player_id,p_secret_hash,p_ready,null);
 $$;
 
 -- Vanhan käyttöliittymän aloituspyyntö merkitsee pyytäjän valmiiksi.
@@ -435,6 +483,7 @@ revoke all on function public.quiz_create_room(text,text,text,integer,integer,te
 revoke all on function public.quiz_join_room(text,text,text) from public, anon, authenticated;
 revoke all on function public.quiz_choose_topic(text,uuid,text,text) from public, anon, authenticated;
 revoke all on function public.quiz_set_ready(text,uuid,text,boolean) from public, anon, authenticated;
+revoke all on function public.quiz_set_ready(text,uuid,text,boolean,jsonb) from public, anon, authenticated;
 revoke all on function public.quiz_start_room(text,uuid,text) from public, anon, authenticated;
 revoke all on function public.quiz_submit_answer(text,uuid,text,integer) from public, anon, authenticated;
 revoke all on function public.quiz_submit_answer(text,uuid,text,integer,integer) from public, anon, authenticated;
@@ -449,6 +498,7 @@ grant execute on function public.quiz_create_room(text,text,text,integer,integer
 grant execute on function public.quiz_join_room(text,text,text) to service_role;
 grant execute on function public.quiz_choose_topic(text,uuid,text,text) to service_role;
 grant execute on function public.quiz_set_ready(text,uuid,text,boolean) to service_role;
+grant execute on function public.quiz_set_ready(text,uuid,text,boolean,jsonb) to service_role;
 grant execute on function public.quiz_start_room(text,uuid,text) to service_role;
 grant execute on function public.quiz_submit_answer(text,uuid,text,integer) to service_role;
 grant execute on function public.quiz_submit_answer(text,uuid,text,integer,integer) to service_role;
@@ -592,18 +642,20 @@ create or replace function public.quiz_bank_pick_varied(
 $$;
 
 create or replace function public.quiz_pick_player_topics(
-  p_room_id uuid, p_difficulty text, p_total integer
+  p_room_id uuid, p_difficulty text, p_total integer, p_generated jsonb
 ) returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare
   v_topics text[];
   v_recent text[];
   v_difficulty text;
-  v_questions jsonb := '[]'::jsonb;
+  v_questions jsonb := p_generated;
+  v_exclude text[];
 begin
   select case when topic_mode='all' then array(select lower(name) from unnest(public.quiz_topic_names()) names(name))
     else array(select lower(chosen_topic) from public.quiz_players where room_id=p_room_id and chosen_topic is not null)
     end into v_topics from public.quiz_rooms where id=p_room_id;
   if coalesce(cardinality(v_topics),0)=0 then return v_questions; end if;
+  select array(select item->>'fingerprint' from jsonb_array_elements(p_generated) q(item)) into v_exclude;
 
   select coalesce(array_agg(fingerprint order by last_seen),'{}'::text[]) into v_recent
   from (
@@ -620,13 +672,13 @@ begin
     case when p_difficulty='keskitaso' then 'helppo' else 'keskitaso' end,
     case when p_difficulty='vaikea' then 'helppo' else 'vaikea' end
   ] loop
-    v_questions := v_questions || public.quiz_bank_pick_varied(
-      v_topics,v_difficulty,p_total-jsonb_array_length(v_questions),'{}'::text[],v_recent,true);
     exit when jsonb_array_length(v_questions)=p_total;
+    v_questions := v_questions || public.quiz_bank_pick_varied(
+      v_topics,v_difficulty,p_total-jsonb_array_length(v_questions),v_exclude,v_recent,true);
   end loop;
 
   return (
-    select coalesce(jsonb_agg(q.item || jsonb_build_object(
+    select coalesce(jsonb_agg((q.item - 'fingerprint') || jsonb_build_object(
       'options',shuffled.options,'answerIndex',shuffled.answer_index
     ) order by random()),'[]'::jsonb)
     from jsonb_array_elements(v_questions) q(item)
@@ -642,6 +694,11 @@ begin
 end;
 $$;
 
+create or replace function public.quiz_pick_player_topics(p_room_id uuid, p_difficulty text, p_total integer)
+returns jsonb language sql security invoker set search_path = '' as $$
+  select public.quiz_pick_player_topics(p_room_id,p_difficulty,p_total,'[]'::jsonb);
+$$;
+
 -- 'mixed' ja 'bank' sallitaan uusissa huoneissa.
 alter table public.quiz_rooms drop constraint if exists quiz_rooms_question_source_check;
 alter table public.quiz_rooms add constraint quiz_rooms_question_source_check
@@ -652,9 +709,11 @@ revoke all on function public.quiz_bank_pick(text,text,integer,text[]) from publ
 revoke all on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[]) from public, anon, authenticated;
 revoke all on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[],boolean) from public, anon, authenticated;
 revoke all on function public.quiz_pick_player_topics(uuid,text,integer) from public, anon, authenticated;
+revoke all on function public.quiz_pick_player_topics(uuid,text,integer,jsonb) from public, anon, authenticated;
 grant execute on function public.quiz_bank_save(text,text,jsonb) to service_role;
 grant execute on function public.quiz_bank_pick(text,text,integer,text[]) to service_role;
 grant execute on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[]) to service_role;
 grant execute on function public.quiz_bank_pick_varied(text[],text,integer,text[],text[],boolean) to service_role;
 grant execute on function public.quiz_pick_player_topics(uuid,text,integer) to service_role;
+grant execute on function public.quiz_pick_player_topics(uuid,text,integer,jsonb) to service_role;
 notify pgrst, 'reload schema';
